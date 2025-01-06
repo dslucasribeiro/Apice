@@ -64,6 +64,8 @@ export default function Simulados() {
   const [uploading, setUploading] = useState(false);
   const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [isEditingPasta, setIsEditingPasta] = useState<number | null>(null);
+  const [editPastaTitle, setEditPastaTitle] = useState('');
 
   useEffect(() => {
     fetchUserType();
@@ -401,6 +403,85 @@ export default function Simulados() {
     setIsModalResolucaoOpen(true);
   };
 
+  const handleEditPasta = async (pastaId: number) => {
+    if (userType?.toLowerCase() !== 'admin') return;
+
+    const pasta = pastas.find(p => p.id === pastaId);
+    if (!pasta) return;
+
+    setIsEditingPasta(pastaId);
+    setEditPastaTitle(pasta.titulo);
+  };
+
+  const handleSaveEditPasta = async (pastaId: number) => {
+    if (!editPastaTitle.trim() || userType?.toLowerCase() !== 'admin') return;
+
+    const supabase = createSupabaseClient();
+    try {
+      const { error } = await supabase
+        .from('simulado_pastas')
+        .update({ titulo: editPastaTitle.trim() })
+        .eq('id', pastaId);
+
+      if (error) throw error;
+
+      setPastas(pastas.map(pasta => 
+        pasta.id === pastaId ? { ...pasta, titulo: editPastaTitle.trim() } : pasta
+      ));
+      setIsEditingPasta(null);
+      setEditPastaTitle('');
+    } catch (error) {
+      console.error('Erro ao editar pasta:', error);
+      alert('Erro ao editar pasta. Por favor, tente novamente.');
+    }
+  };
+
+  const handleDeletePasta = async (pastaId: number) => {
+    if (userType?.toLowerCase() !== 'admin') return;
+
+    if (!confirm('Tem certeza que deseja excluir esta pasta? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    const supabase = createSupabaseClient();
+    try {
+      // Primeiro, verificar se há subpastas
+      const { data: subpastas } = await supabase
+        .from('simulado_pastas')
+        .select('id')
+        .eq('parent_id', pastaId);
+
+      if (subpastas && subpastas.length > 0) {
+        alert('Não é possível excluir esta pasta pois ela contém subpastas. Exclua as subpastas primeiro.');
+        return;
+      }
+
+      // Verificar se há simulados na pasta
+      const { data: simuladosPasta } = await supabase
+        .from('simulados')
+        .select('id')
+        .eq('pasta_id', pastaId);
+
+      if (simuladosPasta && simuladosPasta.length > 0) {
+        alert('Não é possível excluir esta pasta pois ela contém simulados. Exclua os simulados primeiro.');
+        return;
+      }
+
+      // Se não houver subpastas nem simulados, excluir a pasta
+      const { error } = await supabase
+        .from('simulado_pastas')
+        .delete()
+        .eq('id', pastaId);
+
+      if (error) throw error;
+
+      setPastas(pastas.filter(pasta => pasta.id !== pastaId));
+    } catch (error) {
+      console.error('Erro ao excluir pasta:', error);
+      alert('Erro ao excluir pasta. Por favor, tente novamente.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -465,18 +546,67 @@ export default function Simulados() {
             {pastas.map((pasta) => (
               <div
                 key={pasta.id}
-                onClick={() => navegarParaPasta(pasta.id)}
-                className="bg-gray-800 p-6 rounded-lg cursor-pointer hover:bg-gray-700 transition-colors"
+                className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors relative group"
               >
-                <div className="flex items-center space-x-4">
-                  <FolderIcon className="h-8 w-8 text-yellow-400" />
-                  <div>
-                    <h3 className="text-lg font-medium text-white">{pasta.titulo}</h3>
-                    {pasta.descricao && (
-                      <p className="text-gray-400 text-sm mt-1">{pasta.descricao}</p>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center flex-1">
+                    <FolderIcon className="h-6 w-6 text-yellow-500 mr-2" />
+                    {isEditingPasta === pasta.id ? (
+                      <input
+                        type="text"
+                        value={editPastaTitle}
+                        onChange={(e) => setEditPastaTitle(e.target.value)}
+                        onBlur={() => handleSaveEditPasta(pasta.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleSaveEditPasta(pasta.id);
+                          } else if (e.key === 'Escape') {
+                            setIsEditingPasta(null);
+                            setEditPastaTitle('');
+                          }
+                        }}
+                        className="bg-gray-900 text-white px-2 py-1 rounded flex-1"
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        onClick={() => navegarParaPasta(pasta.id)}
+                        className="text-white hover:text-blue-400 font-medium flex-1 text-left"
+                      >
+                        {pasta.titulo}
+                      </button>
                     )}
                   </div>
+                  {userType?.toLowerCase() === 'admin' && (
+                    <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditPasta(pasta.id);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                        title="Editar pasta"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePasta(pasta.id);
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Excluir pasta"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
+                {pasta.descricao && (
+                  <p className="text-gray-400 text-sm">{pasta.descricao}</p>
+                )}
               </div>
             ))}
 
