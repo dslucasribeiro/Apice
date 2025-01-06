@@ -231,20 +231,99 @@ export default function Aulas() {
     }
   };
 
+  const handleDeleteAula = async (aula: Aula, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (userType !== 'Admin') {
+      alert('Você não tem permissão para excluir aulas.');
+      return;
+    }
+
+    if (confirm('Tem certeza que deseja excluir esta aula?')) {
+      try {
+        // Primeiro, excluir todos os comentários relacionados
+        await supabase
+          .from('comentarios')
+          .delete()
+          .eq('aula_id', aula.id);
+
+        // Depois, excluir a aula
+        const { error } = await supabase
+          .from('aulas')
+          .delete()
+          .eq('id', aula.id);
+
+        if (error) throw error;
+
+        // Atualizar a lista de aulas
+        setAulas(aulas.filter(a => a.id !== aula.id));
+      } catch (error) {
+        console.error('Erro ao excluir aula:', error);
+        alert('Erro ao excluir aula. Por favor, tente novamente.');
+      }
+    }
+  };
+
+  const handleDeleteComentario = async (comentario: Comentario) => {
+    // Verificar permissão (admin ou dono do comentário)
+    if (userType !== 'Admin' && comentario.usuario_id !== userId) {
+      alert('Você não tem permissão para excluir este comentário.');
+      return;
+    }
+
+    if (confirm('Tem certeza que deseja excluir este comentário?')) {
+      try {
+        const { error } = await supabase
+          .from('comentarios')
+          .delete()
+          .eq('id', comentario.id);
+
+        if (error) throw error;
+
+        // Atualizar a lista de comentários
+        setComentarios(prevComentarios => {
+          // Se for uma resposta, atualizar dentro do comentário pai
+          if (comentario.parent_id) {
+            return prevComentarios.map(c => ({
+              ...c,
+              respostas: c.respostas?.filter(r => r.id !== comentario.id) || []
+            }));
+          }
+          // Se for um comentário principal, removê-lo da lista
+          return prevComentarios.filter(c => c.id !== comentario.id);
+        });
+      } catch (error) {
+        console.error('Erro ao excluir comentário:', error);
+        alert('Erro ao excluir comentário. Por favor, tente novamente.');
+      }
+    }
+  };
+
   const AulaCard = ({ aula }: { aula: Aula }) => (
     <div 
       className="bg-gray-800 rounded-lg p-6 cursor-pointer hover:bg-gray-700 transition-colors relative group"
       onClick={() => handleAulaClick(aula)}
     >
       {userType === 'Admin' && (
-        <button
-          onClick={(e) => handleEditAula(aula, e)}
-          className="absolute top-2 right-2 p-2 bg-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-600"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-        </button>
+        <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => handleEditAula(aula, e)}
+            className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
+            title="Editar aula"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => handleDeleteAula(aula, e)}
+            className="p-2 bg-red-600 rounded-full hover:bg-red-700"
+            title="Excluir aula"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       )}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-semibold text-white">{aula.titulo}</h3>
@@ -252,8 +331,8 @@ export default function Aulas() {
           {aula.assunto}
         </span>
       </div>
-      <p className="text-gray-300 mb-4">{aula.descricao}</p>
-      <p className="text-sm text-gray-400">
+      <p className="text-gray-300">{aula.descricao}</p>
+      <p className="text-sm text-gray-400 mt-4">
         Adicionada em {new Date(aula.created_at).toLocaleDateString('pt-BR')}
       </p>
     </div>
@@ -261,29 +340,43 @@ export default function Aulas() {
 
   const ComentarioComponent = ({ comentario, isResposta = false }: { comentario: Comentario, isResposta?: boolean }) => (
     <div className={`bg-gray-700 rounded-lg p-4 ${isResposta ? 'ml-8' : ''}`}>
-      <div className="flex items-center gap-3 mb-2">
-        {comentario.usuario.foto_perfil ? (
-          <div className="relative w-8 h-8">
-            <Image
-              src={comentario.usuario.foto_perfil}
-              alt={comentario.usuario.nome}
-              fill
-              className="rounded-full object-cover"
-            />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {comentario.usuario.foto_perfil ? (
+            <div className="relative w-8 h-8">
+              <Image
+                src={comentario.usuario.foto_perfil}
+                alt={comentario.usuario.nome}
+                fill
+                className="rounded-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+              <span className="text-gray-300 text-sm">
+                {comentario.usuario.nome.charAt(0)}
+              </span>
+            </div>
+          )}
+          <div>
+            <p className="text-white font-medium">{comentario.usuario.nome}</p>
+            <p className="text-sm text-gray-400">
+              {new Date(comentario.created_at).toLocaleDateString('pt-BR')}
+            </p>
           </div>
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
-            <span className="text-gray-300 text-sm">
-              {comentario.usuario.nome.charAt(0)}
-            </span>
-          </div>
-        )}
-        <div>
-          <p className="text-white font-medium">{comentario.usuario.nome}</p>
-          <p className="text-sm text-gray-400">
-            {new Date(comentario.created_at).toLocaleDateString('pt-BR')}
-          </p>
         </div>
+        {/* Botão de excluir (visível apenas para admin ou dono do comentário) */}
+        {(userType === 'Admin' || comentario.usuario_id === userId) && (
+          <button
+            onClick={() => handleDeleteComentario(comentario)}
+            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+            title="Excluir comentário"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
       </div>
       <p className="text-gray-300 mb-2">{comentario.texto}</p>
       {!isResposta && userId && (
@@ -374,7 +467,7 @@ export default function Aulas() {
                       className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9-9-9-9-9 9 9 9zm0 0v-8" />
                       </svg>
                       {respondendoA ? 'Enviar resposta' : 'Enviar comentário'}
                     </button>
@@ -388,35 +481,49 @@ export default function Aulas() {
                   <div key={comentario.id} className="space-y-4">
                     {/* Comentário Principal */}
                     <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        {comentario.usuario.foto_perfil ? (
-                          <div className="relative w-10 h-10">
-                            <Image
-                              src={comentario.usuario.foto_perfil}
-                              alt={comentario.usuario.nome}
-                              fill
-                              className="rounded-full object-cover"
-                            />
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          {comentario.usuario.foto_perfil ? (
+                            <div className="relative w-10 h-10">
+                              <Image
+                                src={comentario.usuario.foto_perfil}
+                                alt={comentario.usuario.nome}
+                                fill
+                                className="rounded-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center">
+                              <span className="text-gray-300 text-lg">
+                                {comentario.usuario.nome.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-white font-medium">{comentario.usuario.nome}</p>
+                            <p className="text-sm text-gray-400">
+                              {new Date(comentario.created_at).toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
                           </div>
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center">
-                            <span className="text-gray-300 text-lg">
-                              {comentario.usuario.nome.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-white font-medium">{comentario.usuario.nome}</p>
-                          <p className="text-sm text-gray-400">
-                            {new Date(comentario.created_at).toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
                         </div>
+                        {/* Botão de excluir (visível apenas para admin ou dono do comentário) */}
+                        {(userType === 'Admin' || comentario.usuario_id === userId) && (
+                          <button
+                            onClick={() => handleDeleteComentario(comentario)}
+                            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                            title="Excluir comentário"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                       <p className="text-gray-300 mb-3">{comentario.texto}</p>
                       <button
@@ -435,35 +542,49 @@ export default function Aulas() {
                       <div className="ml-8 space-y-4">
                         {comentario.respostas.map((resposta) => (
                           <div key={resposta.id} className="bg-gray-700/70 rounded-lg p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              {resposta.usuario.foto_perfil ? (
-                                <div className="relative w-8 h-8">
-                                  <Image
-                                    src={resposta.usuario.foto_perfil}
-                                    alt={resposta.usuario.nome}
-                                    fill
-                                    className="rounded-full object-cover"
-                                  />
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                {resposta.usuario.foto_perfil ? (
+                                  <div className="relative w-8 h-8">
+                                    <Image
+                                      src={resposta.usuario.foto_perfil}
+                                      alt={resposta.usuario.nome}
+                                      fill
+                                      className="rounded-full object-cover"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+                                    <span className="text-gray-300 text-sm">
+                                      {resposta.usuario.nome.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-white font-medium">{resposta.usuario.nome}</p>
+                                  <p className="text-sm text-gray-400">
+                                    {new Date(resposta.created_at).toLocaleDateString('pt-BR', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </p>
                                 </div>
-                              ) : (
-                                <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
-                                  <span className="text-gray-300 text-sm">
-                                    {resposta.usuario.nome.charAt(0).toUpperCase()}
-                                  </span>
-                                </div>
-                              )}
-                              <div>
-                                <p className="text-white font-medium">{resposta.usuario.nome}</p>
-                                <p className="text-sm text-gray-400">
-                                  {new Date(resposta.created_at).toLocaleDateString('pt-BR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
                               </div>
+                              {/* Botão de excluir resposta (visível apenas para admin ou dono do comentário) */}
+                              {(userType === 'Admin' || resposta.usuario_id === userId) && (
+                                <button
+                                  onClick={() => handleDeleteComentario(resposta)}
+                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                  title="Excluir resposta"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                             <p className="text-gray-300">{resposta.texto}</p>
                           </div>
@@ -515,14 +636,26 @@ export default function Aulas() {
                     onClick={() => handleAulaClick(aula)}
                   >
                     {userType === 'Admin' && (
-                      <button
-                        onClick={(e) => handleEditAula(aula, e)}
-                        className="absolute top-2 right-2 p-2 bg-gray-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-600"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
+                      <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => handleEditAula(aula, e)}
+                          className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
+                          title="Editar aula"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteAula(aula, e)}
+                          className="p-2 bg-red-600 rounded-full hover:bg-red-700"
+                          title="Excluir aula"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     )}
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-xl font-semibold text-white">{aula.titulo}</h3>

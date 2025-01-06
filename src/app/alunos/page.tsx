@@ -61,8 +61,6 @@ export default function Alunos() {
   const checkIfAdmin = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('Session:', session);
-      
       if (session?.user?.id) {
         const { data: currentUser } = await supabase
           .from('usuarios')
@@ -70,9 +68,7 @@ export default function Alunos() {
           .eq('user_id', session.user.id)
           .single();
 
-        console.log('Current User:', currentUser);
         setIsAdmin(currentUser?.tipo === 'Admin');
-        console.log('Is Admin?', currentUser?.tipo === 'Admin');
       }
     } catch (error) {
       console.error('Error checking admin status:', error);
@@ -259,11 +255,6 @@ export default function Alunos() {
     <div className="min-h-screen bg-gray-900">
       <Navigation />
       <main className="container mx-auto px-4 py-8">
-        {/* Debug */}
-        <div className="text-white mb-4">
-          Debug: isAdmin = {isAdmin ? 'true' : 'false'}
-        </div>
-        
         <div className="flex items-center justify-between mb-6 space-x-4">
           {/* Botão Toggle Admin/Alunos - Só aparece para admins */}
           {isAdmin && (
@@ -271,7 +262,7 @@ export default function Alunos() {
               onClick={() => setShowAdmins(!showAdmins)}
               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 flex items-center"
             >
-              {showAdmins ? 'Alunos' : 'Administradores'}
+              {showAdmins ? 'Ver Alunos' : 'Ver Admins'}
             </button>
           )}
           <div className="flex items-center space-x-4 ml-auto">
