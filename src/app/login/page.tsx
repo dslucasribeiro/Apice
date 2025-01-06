@@ -116,13 +116,6 @@ export default function Login() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
-            
-            <Link
-              href="/register"
-              className="w-full flex justify-center py-2 px-4 border border-blue-500 text-sm font-medium rounded-md text-blue-500 bg-transparent hover:bg-blue-500 hover:text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Criar conta de administrador
-            </Link>
           </div>
         </form>
       </div>
