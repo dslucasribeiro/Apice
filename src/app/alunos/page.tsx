@@ -20,6 +20,10 @@ export default function Alunos() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showAdmins, setShowAdmins] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({
     nome: '',
     cpf: '',
@@ -37,20 +41,58 @@ export default function Alunos() {
 
   useEffect(() => {
     fetchUsers();
+    const userType = localStorage.getItem('userType');
+    setIsAdmin(userType === 'Admin');
   }, []);
+
+  const getCurrentUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      setCurrentUser(userData);
+    }
+  };
+
+  const checkIfAdmin = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('Session:', session);
+      
+      if (session?.user?.id) {
+        const { data: currentUser } = await supabase
+          .from('usuarios')
+          .select('tipo')
+          .eq('user_id', session.user.id)
+          .single();
+
+        console.log('Current User:', currentUser);
+        setIsAdmin(currentUser?.tipo === 'Admin');
+        console.log('Is Admin?', currentUser?.tipo === 'Admin');
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+    }
+  };
 
   useEffect(() => {
     const searchTermLower = searchTerm.toLowerCase();
     const filtered = users.filter(user => {
-      return (
+      const matchesSearch = (
         (user.nome?.toLowerCase() || '').includes(searchTermLower) ||
         (user.email?.toLowerCase() || '').includes(searchTermLower) ||
         (user.cpf || '').includes(searchTerm)
       );
+      const matchesType = showAdmins ? user.tipo === 'Admin' : user.tipo === 'Aluno';
+      return matchesSearch && matchesType;
     });
     setFilteredUsers(filtered);
-    setCurrentPage(1); // Reset para primeira página quando pesquisar
-  }, [searchTerm, users]);
+    setCurrentPage(1);
+  }, [searchTerm, users, showAdmins]);
 
   const fetchUsers = async () => {
     try {
@@ -61,7 +103,8 @@ export default function Alunos() {
 
       if (error) throw error;
       setUsers(data || []);
-      setFilteredUsers(data || []);
+      const initialFiltered = (data || []).filter(user => user.tipo === 'Aluno');
+      setFilteredUsers(initialFiltered);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -102,7 +145,7 @@ export default function Alunos() {
     setEditingUser(null);
   };
 
-  const handleEdit = (user: User) => {
+  const handleEdit = async (user: User) => {
     setNewUser({
       nome: user.nome,
       cpf: user.cpf,
@@ -112,7 +155,7 @@ export default function Alunos() {
       email: user.email,
       ano_conclusao_ensino_medio: user.ano_conclusao_ensino_medio.toString(),
       responsavel_financeiro: user.responsavel_financeiro,
-      tipo: user.tipo,
+      tipo: user.tipo, // Mantendo o tipo original
       status: user.status
     });
     setEditingUser(user.id);
@@ -145,45 +188,46 @@ export default function Alunos() {
         celular: newUser.celular.replace(/\D/g, ''),
       };
 
-      let error;
-      let data;
+      // 1. Primeiro, criar o usuário no auth
+      const { data: authUser, error: authError } = await supabase.auth.signUp({
+        email: userToSave.email,
+        password: userToSave.cpf, // Usando CPF como senha padrão
+        options: {
+          data: {
+            nome: userToSave.nome,
+          }
+        }
+      });
 
-      if (editingUser) {
-        const response = await supabase
-          .from('usuarios')
-          .update(userToSave)
-          .eq('id', editingUser)
-          .select();
-        
-        error = response.error;
-        data = response.data;
-      } else {
-        const response = await supabase
-          .from('usuarios')
-          .insert([userToSave])
-          .select();
-        
-        error = response.error;
-        data = response.data;
+      if (authError) throw authError;
+
+      if (!authUser.user?.id) {
+        throw new Error('Erro ao criar usuário no auth');
       }
 
+      // 2. Depois, inserir na tabela usuarios com o user_id
+      const { data, error } = await supabase
+        .from('usuarios')
+        .insert([{
+          ...userToSave,
+          user_id: authUser.user.id, // Vinculando com o UUID do auth
+        }])
+        .select();
+
       if (error) {
-        console.error('Error details:', error);
+        // Se houver erro, tentar deletar o usuário criado no auth
+        await supabase.auth.admin.deleteUser(authUser.user.id);
         throw error;
       }
 
       if (data) {
-        if (editingUser) {
-          setUsers(users.map(user => user.id === editingUser ? data[0] : user));
-        } else {
-          setUsers([...users, data[0]]);
-        }
+        setUsers([...users, data[0]]);
         setIsModalOpen(false);
         resetForm();
       }
     } catch (error) {
       console.error('Error saving user:', error);
-      alert('Erro ao salvar aluno. Por favor, tente novamente.');
+      alert('Erro ao salvar usuário. Por favor, tente novamente.');
     }
   };
 
@@ -191,6 +235,7 @@ export default function Alunos() {
     const target = e.target as HTMLInputElement | HTMLSelectElement;
     const { name, value } = target;
     setNewUser(prev => ({
+
       ...prev,
       [name]: value
     }));
@@ -214,14 +259,26 @@ export default function Alunos() {
     <div className="min-h-screen bg-gray-900">
       <Navigation />
       <main className="container mx-auto px-4 py-8">
+        {/* Debug */}
+        <div className="text-white mb-4">
+          Debug: isAdmin = {isAdmin ? 'true' : 'false'}
+        </div>
+        
         <div className="flex items-center justify-between mb-6 space-x-4">
-          <h1 className="text-2xl font-bold text-blue-500">Alunos</h1>
-          
-          <div className="flex items-center space-x-4 flex-1 max-w-2xl justify-end">
-            {/* Contador de Alunos */}
-            <div className="flex items-center bg-gray-800 px-4 py-2 rounded-lg">
+          {/* Botão Toggle Admin/Alunos - Só aparece para admins */}
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdmins(!showAdmins)}
+              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 flex items-center"
+            >
+              {showAdmins ? 'Alunos' : 'Administradores'}
+            </button>
+          )}
+          <div className="flex items-center space-x-4 ml-auto">
+            {/* Contador de Usuários */}
+            <div className="hidden sm:flex items-center bg-gray-800 px-4 py-2 rounded-lg">
               <span className="text-xl font-bold text-blue-500">{filteredUsers.length}</span>
-              <span className="ml-2 text-gray-400">Alunos</span>
+              <span className="ml-2 text-gray-400">{showAdmins ? 'Admins' : 'Alunos'}</span>
             </div>
 
             {/* Campo de Pesquisa */}
@@ -230,7 +287,7 @@ export default function Alunos() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar aluno..."
+                placeholder={`Buscar ${showAdmins ? 'admin' : 'aluno'}...`}
                 className="w-full px-4 py-2 bg-gray-800 text-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -240,13 +297,45 @@ export default function Alunos() {
               </div>
             </div>
 
-            {/* Botão Adicionar */}
-            <button
-              onClick={() => { setIsModalOpen(true); setEditingUser(null); }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
-            >
-              Adicionar Aluno
-            </button>
+            {/* Botão Adicionar com Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center whitespace-nowrap"
+              >
+                Adicionar Usuário
+                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-xl z-50">
+                  <button
+                    onClick={() => {
+                      setNewUser(prev => ({ ...prev, tipo: 'Aluno' }));
+                      setIsModalOpen(true);
+                      setIsDropdownOpen(false);
+                      setEditingUser(null);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-t-lg"
+                  >
+                    Cadastrar Aluno
+                  </button>
+                  <button
+                    onClick={() => {
+                      setNewUser(prev => ({ ...prev, tipo: 'Admin' }));
+                      setIsModalOpen(true);
+                      setIsDropdownOpen(false);
+                      setEditingUser(null);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-b-lg"
+                  >
+                    Cadastrar Admin
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -345,7 +434,7 @@ export default function Alunos() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
               <h2 className="text-xl font-bold text-blue-500 mb-4">
-                {editingUser ? 'Editar Aluno' : 'Adicionar Aluno'}
+                {editingUser ? 'Editar Usuário' : `Adicionar ${newUser.tipo}`}
               </h2>
               <div className="space-y-4">
                 <div>
@@ -440,7 +529,7 @@ export default function Alunos() {
                     <option value="Outro">Outro</option>
                   </select>
                 </div>
-                <input type="hidden" name="tipo" value="Aluno" />
+                <input type="hidden" name="tipo" value={newUser.tipo} />
                 <input type="hidden" name="status" value="ativo" />
                 <div className="flex justify-end space-x-3 mt-6">
                   <button
@@ -456,7 +545,7 @@ export default function Alunos() {
                     onClick={handleSubmit}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                   >
-                    {editingUser ? 'Atualizar' : 'Salvar'}
+                    {editingUser ? 'Atualizar' : 'Cadastrar'}
                   </button>
                 </div>
               </div>
