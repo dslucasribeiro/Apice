@@ -16,6 +16,8 @@ export default function Perfil() {
   const [userType, setUserType] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const itemsPerPage = 10;
   const supabase = createSupabaseClient();
 
@@ -106,6 +108,40 @@ export default function Perfil() {
     }
   };
 
+  const handleEdit = (user: User) => {
+    setEditingUser({ ...user });
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('usuarios')
+        .update({
+          nome: editingUser.nome,
+          cpf: editingUser.cpf,
+          data_nasc: editingUser.data_nasc,
+          celular: editingUser.celular,
+          email: editingUser.email,
+          status: editingUser.status
+        })
+        .eq('id', editingUser.id);
+
+      if (error) throw error;
+
+      // Atualiza a lista de usuários
+      await fetchUsers();
+      setShowEditModal(false);
+      setEditingUser(null);
+    } catch (error: any) {
+      console.error('Erro ao atualizar usuário:', error.message);
+      alert('Erro ao atualizar usuário. Por favor, tente novamente.');
+    }
+  };
+
   const UserCard = ({ user }: UserCardProps) => (
     <div className="mt-8 flex justify-center px-4">
       <div className="relative bg-gradient-to-br from-blue-900 to-gray-900 rounded-xl shadow-2xl p-8 w-full max-w-5xl mx-auto overflow-hidden">
@@ -122,7 +158,7 @@ export default function Perfil() {
               </span>
               <button 
                 className="text-blue-400 hover:text-blue-300 transition-colors"
-                onClick={() => {/* TODO: Implementar edição */}}
+                onClick={() => handleEdit(user)}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
@@ -251,6 +287,99 @@ export default function Perfil() {
           )}
         </div>
       </main>
+
+      {/* Modal de Edição */}
+      {showEditModal && editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg">
+            <h2 className="text-xl font-semibold text-white mb-4">Editar Identificação</h2>
+            
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Nome</label>
+                <input
+                  type="text"
+                  value={editingUser.nome || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, nome: e.target.value })}
+                  className="w-full bg-gray-700 text-white rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">CPF</label>
+                <input
+                  type="text"
+                  value={editingUser.cpf || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, cpf: e.target.value })}
+                  className="w-full bg-gray-700 text-white rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Data de Nascimento</label>
+                <input
+                  type="date"
+                  value={editingUser.data_nasc?.split('T')[0] || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, data_nasc: e.target.value })}
+                  className="w-full bg-gray-700 text-white rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Celular</label>
+                <input
+                  type="tel"
+                  value={editingUser.celular || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, celular: e.target.value })}
+                  className="w-full bg-gray-700 text-white rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editingUser.email || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                  className="w-full bg-gray-700 text-white rounded-lg p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Status</label>
+                <select
+                  value={editingUser.status || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value })}
+                  className="w-full bg-gray-700 text-white rounded-lg p-2"
+                >
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                  <option value="Pendente">Pendente</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingUser(null);
+                  }}
+                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
