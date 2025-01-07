@@ -33,6 +33,7 @@ export default function Duvidas() {
   const [novoTopico, setNovoTopico] = useState({ titulo: '', descricao: '' });
   const [novaResposta, setNovaResposta] = useState('');
   const [userType, setUserType] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showNovoTopicoModal, setShowNovoTopicoModal] = useState(false);
   const supabase = createSupabaseClient();
@@ -46,9 +47,12 @@ export default function Duvidas() {
     const storedUserType = localStorage.getItem('userType');
     if (storedUserType) {
       setUserType(storedUserType);
-    } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+    }
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setUserId(user.id);
+      if (!storedUserType) {
         const { data: userData } = await supabase
           .from('usuarios')
           .select('tipo')
@@ -333,7 +337,7 @@ export default function Duvidas() {
                         {topico.status === 'resolvido' && (
                           <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
                         )}
-                        {(userType?.toLowerCase() === 'admin' || topico.user_id === supabase.auth.getUser().then(({ data }) => data.user?.id)) && (
+                        {(userType?.toLowerCase() === 'admin' || topico.user_id === userId) && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
