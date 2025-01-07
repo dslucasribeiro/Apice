@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Navigation from '@/components/Navigation';
 import { createSupabaseClient } from '@/lib/supabase';
-import { ChatBubbleLeftIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftIcon, CheckCircleIcon, XCircleIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 interface Topico {
   id: number;
@@ -205,12 +205,79 @@ export default function Duvidas() {
 
     if (error) {
       console.error('Erro ao marcar como resolvido:', error);
-      alert('Erro ao atualizar status. Por favor, tente novamente.');
+      alert('Erro ao marcar tópico como resolvido. Por favor, tente novamente.');
     } else {
+      // Atualiza o tópico selecionado e a lista de tópicos
+      setTopicoSelecionado(prev => prev ? { ...prev, status: 'resolvido' } : null);
       fetchTopicos();
-      if (topicoSelecionado?.id === topicoId) {
-        setTopicoSelecionado(prev => prev ? { ...prev, status: 'resolvido' } : null);
+    }
+  };
+
+  const desmarcarComoResolvido = async (topicoId: number) => {
+    const { error } = await supabase
+      .from('topicos_duvidas')
+      .update({ status: 'aberto' })
+      .eq('id', topicoId);
+
+    if (error) {
+      console.error('Erro ao desmarcar como resolvido:', error);
+      alert('Erro ao desmarcar tópico como resolvido. Por favor, tente novamente.');
+    } else {
+      // Atualiza o tópico selecionado e a lista de tópicos
+      setTopicoSelecionado(prev => prev ? { ...prev, status: 'aberto' } : null);
+      fetchTopicos();
+    }
+  };
+
+  const excluirTopico = async (topico: Topico) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Verifica se o usuário tem permissão para excluir
+      if (userType?.toLowerCase() !== 'admin' && user.id !== topico.user_id) {
+        alert('Você não tem permissão para excluir este tópico.');
+        return;
       }
+
+      if (!confirm('Tem certeza que deseja excluir este tópico? Esta ação não pode ser desfeita.')) {
+        return;
+      }
+
+      // Primeiro exclui todas as respostas do tópico
+      const { error: respostasError } = await supabase
+        .from('respostas_duvidas')
+        .delete()
+        .eq('topico_id', topico.id);
+
+      if (respostasError) {
+        console.error('Erro ao excluir respostas:', respostasError);
+        throw respostasError;
+      }
+
+      // Depois exclui o tópico
+      const { error: topicoError } = await supabase
+        .from('topicos_duvidas')
+        .delete()
+        .eq('id', topico.id);
+
+      if (topicoError) {
+        console.error('Erro ao excluir tópico:', topicoError);
+        throw topicoError;
+      }
+
+      // Se o tópico excluído era o selecionado, limpa a seleção
+      if (topicoSelecionado?.id === topico.id) {
+        setTopicoSelecionado(null);
+        setRespostas([]);
+      }
+
+      // Atualiza a lista de tópicos
+      await fetchTopicos();
+
+    } catch (error) {
+      console.error('Erro ao excluir:', error);
+      alert('Erro ao excluir tópico. Por favor, tente novamente.');
     }
   };
 
@@ -254,7 +321,7 @@ export default function Duvidas() {
                       setTopicoSelecionado(topico);
                       fetchRespostas(topico.id);
                     }}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    className={`p-3 rounded-lg cursor-pointer transition-colors group relative ${
                       topicoSelecionado?.id === topico.id
                         ? 'bg-blue-600'
                         : 'bg-gray-700 hover:bg-gray-600'
@@ -262,9 +329,23 @@ export default function Duvidas() {
                   >
                     <div className="flex items-center justify-between">
                       <h3 className="font-medium text-white line-clamp-1">{topico.titulo}</h3>
-                      {topico.status === 'resolvido' && (
-                        <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
-                      )}
+                      <div className="flex items-center space-x-2">
+                        {topico.status === 'resolvido' && (
+                          <CheckCircleIcon className="h-5 w-5 text-green-400 flex-shrink-0" />
+                        )}
+                        {(userType?.toLowerCase() === 'admin' || topico.user_id === supabase.auth.getUser().then(({ data }) => data.user?.id)) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              excluirTopico(topico);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-500"
+                            title="Excluir tópico"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-gray-300 mt-1">
                       por {topico.nomeUsuario}
@@ -286,13 +367,25 @@ export default function Duvidas() {
                 <div className="border-b border-gray-700 pb-4 mb-4 sticky top-0 bg-gray-800">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-white break-words">{topicoSelecionado.titulo}</h2>
-                    {userType === 'Admin' && topicoSelecionado.status !== 'resolvido' && (
+                    {userType === 'Admin' && (
                       <button
-                        onClick={() => marcarComoResolvido(topicoSelecionado.id)}
-                        className="flex items-center space-x-2 text-green-400 hover:text-green-300 ml-4"
+                        onClick={() => topicoSelecionado.status === 'resolvido' 
+                          ? desmarcarComoResolvido(topicoSelecionado.id)
+                          : marcarComoResolvido(topicoSelecionado.id)
+                        }
+                        className={`flex items-center space-x-2 ml-4 ${
+                          topicoSelecionado.status === 'resolvido'
+                            ? 'text-yellow-400 hover:text-yellow-300'
+                            : 'text-green-400 hover:text-green-300'
+                        }`}
                       >
                         <CheckCircleIcon className="h-5 w-5" />
-                        <span className="hidden sm:inline">Marcar como resolvido</span>
+                        <span className="hidden sm:inline">
+                          {topicoSelecionado.status === 'resolvido'
+                            ? 'Desmarcar como resolvido'
+                            : 'Marcar como resolvido'
+                          }
+                        </span>
                       </button>
                     )}
                   </div>
