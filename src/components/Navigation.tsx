@@ -29,7 +29,8 @@ export default function Navigation() {
   };
 
   const handleSupport = () => {
-    window.open('https://wa.me/5511999999999?text=Olá,%20preciso%20de%20ajuda%20com%20o%20sistema%20Ápice', '_blank');
+    const message = encodeURIComponent('Olá, preciso de ajuda com o sistema Ápice');
+    window.open(`https://api.whatsapp.com/send?phone=5591984559727&text=${message}`, '_blank');
   };
 
   const fetchUserType = async () => {
@@ -69,7 +70,10 @@ export default function Navigation() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Link href="/" className="text-2xl font-bold text-blue-500">
+              <Link 
+                href={userType === 'Aluno' ? '/perfil' : '/'} 
+                className="text-2xl font-bold text-blue-500"
+              >
                 Ápice
               </Link>
             </div>

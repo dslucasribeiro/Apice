@@ -262,7 +262,7 @@ export default function Alunos() {
               onClick={() => setShowAdmins(!showAdmins)}
               className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 flex items-center"
             >
-              {showAdmins ? 'Ver Alunos' : 'Ver Admins'}
+              {showAdmins ? 'Alunos' : 'Administradores'}
             </button>
           )}
           <div className="flex items-center space-x-4 ml-auto">

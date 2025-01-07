@@ -30,6 +30,10 @@ interface DashboardStats {
   totalUsuarios: number;
   totalAulas: number;
   totalAvisos: number;
+  totalSimulados: number;
+  totalMateriais: number;
+  totalDuvidas: number;
+  duvidasResolvidas: number;
   comentariosPorDia: {
     data: string;
     total: number;
@@ -37,6 +41,22 @@ interface DashboardStats {
   distribuicaoUsuarios: {
     tipo: string;
     total: number;
+  }[];
+  desempenhoSimulados: {
+    simulado: string;
+    media: number;
+  }[];
+  materiaisMaisAcessados: {
+    id: number;
+    titulo: string;
+    acessos: number;
+    tipo: string;
+  }[];
+  ultimasDuvidas: {
+    id: number;
+    titulo: string;
+    status: string;
+    data_criacao: string;
   }[];
   ultimasAulas: {
     id: number;
@@ -71,20 +91,71 @@ export default function Home() {
 
   const fetchDashboardStats = async () => {
     try {
-      // Buscar total de usuários
+      // Buscar totais existentes
       const { count: totalUsuarios } = await supabase
         .from('usuarios')
         .select('*', { count: 'exact', head: true });
 
-      // Buscar total de aulas
       const { count: totalAulas } = await supabase
         .from('aulas')
         .select('*', { count: 'exact', head: true });
 
-      // Buscar total de avisos
       const { count: totalAvisos } = await supabase
         .from('avisos')
         .select('*', { count: 'exact', head: true });
+
+      // Novos totais
+      const { count: totalSimulados } = await supabase
+        .from('simulados')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: totalMateriais } = await supabase
+        .from('materiais')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: totalDuvidas } = await supabase
+        .from('duvidas')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: duvidasResolvidas } = await supabase
+        .from('duvidas')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'resolvida');
+
+      // Buscar desempenho dos simulados
+      const { data: simulados } = await supabase
+        .from('simulados')
+        .select('titulo, notas')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const desempenhoSimulados = simulados?.map(simulado => ({
+        simulado: simulado.titulo,
+        media: Array.isArray(simulado.notas) 
+          ? simulado.notas.reduce((acc: number, curr: number) => acc + curr, 0) / simulado.notas.length 
+          : 0
+      })) || [];
+
+      // Buscar materiais mais acessados
+      const { data: materiais } = await supabase
+        .from('materiais')
+        .select('id, titulo, acessos, tipo')
+        .order('acessos', { ascending: false })
+        .limit(5);
+
+      const materiaisMaisAcessados = materiais || [];
+
+      // Buscar últimas dúvidas
+      const { data: ultimasDuvidas } = await supabase
+        .from('duvidas')
+        .select('id, titulo, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const transformedDuvidas = ultimasDuvidas?.map(duvida => ({
+        ...duvida,
+        data_criacao: duvida.created_at
+      })) || [];
 
       // Buscar comentários por dia (últimos 7 dias)
       const { data: comentariosPorDia } = await supabase
@@ -147,8 +218,15 @@ export default function Home() {
         totalUsuarios: totalUsuarios || 0,
         totalAulas: totalAulas || 0,
         totalAvisos: totalAvisos || 0,
+        totalSimulados: totalSimulados || 0,
+        totalMateriais: totalMateriais || 0,
+        totalDuvidas: totalDuvidas || 0,
+        duvidasResolvidas: duvidasResolvidas || 0,
         comentariosPorDia: comentariosProcessados,
         distribuicaoUsuarios: distribuicaoProcessada,
+        desempenhoSimulados,
+        materiaisMaisAcessados,
+        ultimasDuvidas: transformedDuvidas,
         ultimasAulas: transformedAulas,
         ultimosAvisos: transformedAvisos,
       });
@@ -181,7 +259,7 @@ export default function Home() {
         </div>
 
         {/* Cards de Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 shadow-lg">
             <h3 className="text-lg font-semibold text-white mb-2">Total de Alunos</h3>
             <p className="text-3xl font-bold text-white">{stats?.totalUsuarios}</p>
@@ -191,7 +269,32 @@ export default function Home() {
             <p className="text-3xl font-bold text-white">{stats?.totalAulas}</p>
           </div>
           <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl p-6 shadow-lg">
-            <h3 className="text-lg font-semibold text-white mb-2">Total de Avisos</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">Materiais</h3>
+            <p className="text-3xl font-bold text-white">{stats?.totalMateriais}</p>
+          </div>
+          <div className="bg-gradient-to-br from-yellow-600 to-yellow-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Simulados</h3>
+            <p className="text-3xl font-bold text-white">{stats?.totalSimulados}</p>
+          </div>
+        </div>
+
+        {/* Segunda linha de cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Dúvidas</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-white">{stats?.totalDuvidas}</p>
+                <p className="text-sm text-white opacity-80">Total</p>
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-white">{stats?.duvidasResolvidas}</p>
+                <p className="text-sm text-white opacity-80">Resolvidas</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-red-600 to-red-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-2">Avisos</h3>
             <p className="text-3xl font-bold text-white">{stats?.totalAvisos}</p>
           </div>
         </div>
@@ -271,6 +374,67 @@ export default function Home() {
                   },
                 }}
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Insights */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gray-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-4">Desempenho em Simulados</h3>
+            <div className="space-y-4">
+              {stats?.desempenhoSimulados.map((item, index) => (
+                <div key={index} className="bg-gray-700 rounded-lg p-4">
+                  <h4 className="text-white font-medium">{item.simulado}</h4>
+                  <div className="flex items-center mt-2">
+                    <div className="flex-grow bg-gray-600 rounded-full h-2">
+                      <div
+                        className="bg-blue-500 h-2 rounded-full"
+                        style={{ width: `${(item.media / 10) * 100}%` }}
+                      />
+                    </div>
+                    <span className="ml-2 text-white">{item.media.toFixed(1)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-4">Materiais Mais Acessados</h3>
+            <div className="space-y-4">
+              {stats?.materiaisMaisAcessados.map(material => (
+                <div key={material.id} className="bg-gray-700 rounded-lg p-4">
+                  <h4 className="text-white font-medium">{material.titulo}</h4>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-gray-400 text-sm">{material.tipo}</span>
+                    <span className="text-blue-400">{material.acessos} acessos</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-white mb-4">Últimas Dúvidas</h3>
+            <div className="space-y-4">
+              {stats?.ultimasDuvidas.map(duvida => (
+                <div key={duvida.id} className="bg-gray-700 rounded-lg p-4">
+                  <h4 className="text-white font-medium">{duvida.titulo}</h4>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      duvida.status === 'resolvida' 
+                        ? 'bg-green-900 text-green-300' 
+                        : 'bg-yellow-900 text-yellow-300'
+                    }`}>
+                      {duvida.status}
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      {new Date(duvida.data_criacao).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
