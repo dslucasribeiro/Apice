@@ -14,11 +14,14 @@ export default function Perfil() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [userType, setUserType] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
   const supabase = createSupabaseClient();
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [currentPage]); // Refetch quando a página mudar
 
   const fetchUsers = async () => {
     try {
@@ -39,18 +42,28 @@ export default function Perfil() {
       setUserType(userData?.tipo || null);
 
       // Se for aluno, buscar apenas os próprios dados
-      // Se for admin, buscar todos os usuários
+      // Se for admin, buscar todos os usuários com paginação e ordenação
       let query = supabase
         .from('usuarios')
-        .select('*');
+        .select('*', { count: 'exact' });
 
       if (userData?.tipo === 'Aluno') {
         query = query.eq('user_id', currentUser.id);
+      } else {
+        // Para admin, aplicar ordenação e paginação
+        query = query
+          .order('nome', { ascending: true })
+          .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
       }
 
-      const { data, error } = await query;
+      const { data, error, count } = await query;
 
       if (error) throw error;
+      
+      if (count !== null) {
+        setTotalPages(Math.ceil(count / itemsPerPage));
+      }
+      
       setUsers(data || []);
     } catch (error: any) {
       console.error('Error fetching users:', error.message);
@@ -188,13 +201,54 @@ export default function Perfil() {
     <div className="min-h-screen bg-gray-900">
       <Navigation />
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-8">Identificação</h1>
+        <div className="max-w-6xl mx-auto">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-2xl font-bold text-white">Identificação</h1>
+            {userType === 'Admin' && (
+              <div className="text-gray-400 text-sm">
+                Total de registros: {users.length}
+              </div>
+            )}
+          </div>
+          
           <div className="grid md:grid-cols-2 gap-8">
             {users.map((user) => (
               <UserCard key={user.id} user={user} />
             ))}
           </div>
+
+          {/* Paginação - Visível apenas para admin e quando houver mais de uma página */}
+          {userType === 'Admin' && totalPages > 1 && (
+            <div className="mt-8 flex justify-center items-center space-x-4">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded-md ${
+                  currentPage === 1
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                Anterior
+              </button>
+              
+              <span className="text-white">
+                Página {currentPage} de {totalPages}
+              </span>
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded-md ${
+                  currentPage === totalPages
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                Próxima
+              </button>
+            </div>
+          )}
         </div>
       </main>
     </div>
