@@ -2,22 +2,43 @@
 
 import { useState, useEffect } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
-import type { User } from '@/types/user';
+import { User as AuthUser } from '@/types/user';
 import Navigation from '@/components/Navigation';
 import Image from 'next/image';
 
 interface UserCardProps {
-  user: User;
+  user: UserProfile;
+}
+
+interface UserProfile {
+  id: number;
+  user_id: string;
+  created_at?: string | null;
+  nome: string;
+  cpf: string | null;
+  rg: string | null;
+  data_nasc: string | null;
+  celular: string | null;
+  email: string | null;
+  ano_conclusao_ensino_medio: number | null;
+  responsavel_financeiro: string | null;
+  foto_perfil: string | null;
+  tipo: string | null;
+  status: string | null;
+  newProfilePicture?: File;
+  previewUrl?: string;
 }
 
 export default function Perfil() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [userType, setUserType] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const itemsPerPage = 10;
   const supabase = createSupabaseClient();
 
@@ -78,19 +99,20 @@ export default function Perfil() {
     console.log('Users state updated:', users);
   }, [users]);
 
+  // Funções de formatação
   const formatCPF = (cpf: string | null) => {
-    if (!cpf) return 'Não informado';
-    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  };
-
-  const formatPhone = (phone: string | null) => {
-    if (!phone) return 'Não informado';
-    return phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    if (!cpf) return 'CPF não informado';
+    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/g, '$1.$2.$3-$4');
   };
 
   const formatDate = (date: string | null) => {
-    if (!date) return 'Não informada';
+    if (!date) return 'Data não informada';
     return new Date(date).toLocaleDateString('pt-BR');
+  };
+
+  const formatPhone = (phone: string | null) => {
+    if (!phone) return 'Telefone não informado';
+    return phone.replace(/(\d{2})(\d{5})(\d{4})/g, '($1) $2-$3');
   };
 
   const getStatusColor = (status: string | null) => {
@@ -108,7 +130,19 @@ export default function Perfil() {
     }
   };
 
-  const handleEdit = (user: User) => {
+  const getImageUrl = (path: string | null) => {
+    if (!path) return null;
+    
+    // Se a URL já for completa (começa com http ou https), retorna ela mesma
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    
+    // Caso contrário, constrói a URL do Supabase
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/fotos_perfil/${path}`;
+  };
+
+  const handleEdit = (user: UserProfile) => {
     setEditingUser({ ...user });
     setShowEditModal(true);
   };
@@ -118,6 +152,37 @@ export default function Perfil() {
     if (!editingUser) return;
 
     try {
+      let fotoUrl = editingUser.foto_perfil;
+
+      // Se houver uma nova foto para upload
+      if (editingUser.newProfilePicture) {
+        const file = editingUser.newProfilePicture;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+
+        // Upload da nova foto
+        const { error: uploadError, data } = await supabase.storage
+          .from('fotos_perfil')
+          .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+
+        // Se havia uma foto anterior, deletá-la
+        if (editingUser.foto_perfil) {
+          try {
+            await supabase.storage
+              .from('fotos_perfil')
+              .remove([editingUser.foto_perfil]);
+          } catch (error) {
+            console.error('Erro ao deletar foto antiga:', error);
+          }
+        }
+
+        // Atualizar a URL da foto
+        fotoUrl = fileName;
+      }
+
+      // Atualizar dados do usuário
       const { error } = await supabase
         .from('usuarios')
         .update({
@@ -126,7 +191,8 @@ export default function Perfil() {
           data_nasc: editingUser.data_nasc,
           celular: editingUser.celular,
           email: editingUser.email,
-          status: editingUser.status
+          status: editingUser.status,
+          foto_perfil: fotoUrl
         })
         .eq('id', editingUser.id);
 
@@ -142,6 +208,90 @@ export default function Perfil() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Verificar o tamanho do arquivo (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('A foto deve ter no máximo 5MB');
+        return;
+      }
+
+      // Verificar o tipo do arquivo
+      if (!file.type.startsWith('image/')) {
+        alert('O arquivo deve ser uma imagem');
+        return;
+      }
+
+      // Criar URL para preview
+      const previewUrl = URL.createObjectURL(file);
+
+      setEditingUser(prev => prev ? {
+        ...prev,
+        newProfilePicture: file,
+        previewUrl: previewUrl
+      } : null);
+    }
+  };
+
+  const handlePhotoClick = (user: UserProfile) => {
+    setSelectedUser({ ...user });
+    setShowPhotoModal(true);
+  };
+
+  const handlePhotoUpdate = async (file: File) => {
+    if (!selectedUser) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+
+      // Upload da nova foto
+      const { error: uploadError } = await supabase.storage
+        .from('fotos_perfil')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Se havia uma foto anterior, deletá-la
+      if (selectedUser.foto_perfil) {
+        try {
+          await supabase.storage
+            .from('fotos_perfil')
+            .remove([selectedUser.foto_perfil]);
+        } catch (error) {
+          console.error('Erro ao deletar foto antiga:', error);
+        }
+      }
+
+      // Atualizar no banco de dados
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ foto_perfil: fileName })
+        .eq('id', selectedUser.id);
+
+      if (error) throw error;
+
+      // Atualiza a lista de usuários
+      await fetchUsers();
+      setShowPhotoModal(false);
+      setSelectedUser(null);
+    } catch (error: any) {
+      console.error('Erro ao atualizar foto:', error.message);
+      alert('Erro ao atualizar foto. Por favor, tente novamente.');
+    }
+  };
+
+  // Cleanup function para liberar as URLs de preview
+  useEffect(() => {
+    return () => {
+      if (editingUser?.previewUrl) {
+        URL.revokeObjectURL(editingUser.previewUrl);
+      }
+    };
+  }, [editingUser?.previewUrl]);
+
   const UserCard = ({ user }: UserCardProps) => (
     <div className="mt-8 flex justify-center px-4">
       <div className="relative bg-gradient-to-br from-blue-900 to-gray-900 rounded-xl shadow-2xl p-8 w-full max-w-5xl mx-auto overflow-hidden">
@@ -156,24 +306,26 @@ export default function Perfil() {
               <span className={`px-3 py-1 rounded-full text-sm font-semibold text-white ${getStatusColor(user.status)}`}>
                 {user.status || 'Indefinido'}
               </span>
-              <button 
-                className="text-blue-400 hover:text-blue-300 transition-colors"
-                onClick={() => handleEdit(user)}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                </svg>
-              </button>
+              {userType === 'Admin' && (
+                <button 
+                  className="text-blue-400 hover:text-blue-300 transition-colors"
+                  onClick={() => handleEdit(user)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
           {/* Foto e Informações Principais */}
           <div className="flex gap-6 mb-6">
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 relative group">
               <div className="w-32 h-32 rounded-lg overflow-hidden bg-gray-700 border-2 border-blue-400">
                 {user.foto_perfil ? (
                   <Image
-                    src={user.foto_perfil}
+                    src={getImageUrl(user.foto_perfil) || ''}
                     alt={user.nome || 'Usuário'}
                     width={128}
                     height={128}
@@ -187,10 +339,24 @@ export default function Perfil() {
                   </div>
                 )}
               </div>
+              <button
+                onClick={() => handlePhotoClick(user)}
+                className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center transition-all duration-200 rounded-lg"
+              >
+                <svg
+                  className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
             </div>
             
             <div className="flex-grow">
-              <h3 className="text-xl font-semibold text-white mb-2">{user.nome || 'Nome não informado'}</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">{user.nome}</h3>
               <div className="space-y-1 text-gray-300">
                 <p className="text-sm">CPF: {formatCPF(user.cpf)}</p>
                 <p className="text-sm">D. Nascimento: {formatDate(user.data_nasc)}</p>
@@ -211,7 +377,10 @@ export default function Perfil() {
               <div className="w-20 h-20 bg-white/10 rounded-lg flex items-center justify-center">
                 <div className="w-16 h-16 grid grid-cols-4 grid-rows-4 gap-0.5">
                   {Array(16).fill(0).map((_, i) => (
-                    <div key={i} className={`bg-white/80 ${Math.random() > 0.5 ? 'opacity-100' : 'opacity-30'}`}></div>
+                    <div 
+                      key={i} 
+                      className={`bg-white/80 ${Math.random() > 0.5 ? 'opacity-100' : 'opacity-30'}`}
+                    />
                   ))}
                 </div>
               </div>
@@ -377,6 +546,104 @@ export default function Perfil() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Foto */}
+      {showPhotoModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold text-white mb-4">Alterar Foto de Perfil</h2>
+            
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <div className="w-32 h-32 rounded-lg overflow-hidden bg-gray-700 border-2 border-blue-400">
+                  {selectedUser.previewUrl ? (
+                    <Image
+                      src={selectedUser.previewUrl}
+                      alt={selectedUser.nome || 'Preview'}
+                      width={128}
+                      height={128}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : selectedUser.foto_perfil ? (
+                    <Image
+                      src={getImageUrl(selectedUser.foto_perfil) || ''}
+                      alt={selectedUser.nome || 'Usuário'}
+                      width={128}
+                      height={128}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      const file = e.target.files[0];
+                      if (file.size > 5 * 1024 * 1024) {
+                        alert('A foto deve ter no máximo 5MB');
+                        return;
+                      }
+                      const previewUrl = URL.createObjectURL(file);
+                      setSelectedUser(prev => prev ? {
+                        ...prev,
+                        newProfilePicture: file,
+                        previewUrl
+                      } : null);
+                    }
+                  }}
+                  className="hidden"
+                  id="foto-perfil-modal"
+                />
+                <label
+                  htmlFor="foto-perfil-modal"
+                  className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer mb-2"
+                >
+                  Escolher Foto
+                </label>
+                <p className="text-sm text-gray-400">
+                  Tamanho máximo: 5MB. Formatos: JPG, PNG
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    if (selectedUser?.previewUrl) {
+                      URL.revokeObjectURL(selectedUser.previewUrl);
+                    }
+                    setShowPhotoModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    if (selectedUser?.newProfilePicture) {
+                      handlePhotoUpdate(selectedUser.newProfilePicture);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={!selectedUser?.newProfilePicture}
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
