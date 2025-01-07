@@ -9,54 +9,142 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      usuarios: {
+      aulas: {
         Row: {
           id: number
-          user_id: string | null
-          created_at: string | null
-          nome: string
-          cpf: string
-          rg: string
-          data_nasc: string
-          celular: string
-          email: string
-          ano_conclusao_ensino_medio: number
-          responsavel_financeiro: string | null
-          foto_perfil: string | null
-          tipo: string | null
-          status: string | null
+          titulo: string
+          assunto: string
+          created_at: string
+          // adicione outros campos conforme necessário
         }
         Insert: {
           id?: number
-          user_id?: string | null
-          created_at?: string | null
-          nome: string
-          cpf: string
-          rg: string
-          data_nasc: string
-          celular: string
-          email: string
-          ano_conclusao_ensino_medio: number
-          responsavel_financeiro?: string | null
-          foto_perfil?: string | null
-          tipo?: string | null
-          status?: string | null
+          titulo: string
+          assunto: string
+          created_at?: string
         }
         Update: {
           id?: number
-          user_id?: string | null
-          created_at?: string | null
-          nome?: string
-          cpf?: string
-          rg?: string
-          data_nasc?: string
-          celular?: string
-          email?: string
-          ano_conclusao_ensino_medio?: number
-          responsavel_financeiro?: string | null
-          foto_perfil?: string | null
-          tipo?: string | null
-          status?: string | null
+          titulo?: string
+          assunto?: string
+          created_at?: string
+        }
+      }
+      avisos: {
+        Row: {
+          id: number
+          titulo: string
+          created_at: string
+          // adicione outros campos conforme necessário
+        }
+        Insert: {
+          id?: number
+          titulo: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          titulo?: string
+          created_at?: string
+        }
+      }
+      comentarios: {
+        Row: {
+          id: number
+          texto: string
+          created_at: string
+          // adicione outros campos conforme necessário
+        }
+        Insert: {
+          id?: number
+          texto: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          texto?: string
+          created_at?: string
+        }
+      }
+      materiais_didaticos: {
+        Row: {
+          id: number
+          titulo: string
+          tipo: string
+          acessos: number
+          created_at: string
+          // adicione outros campos conforme necessário
+        }
+        Insert: {
+          id?: number
+          titulo: string
+          tipo: string
+          acessos?: number
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          titulo?: string
+          tipo?: string
+          acessos?: number
+          created_at?: string
+        }
+      }
+      simulados: {
+        Row: {
+          id: number
+          titulo: string
+          created_at: string
+          // adicione outros campos conforme necessário
+        }
+        Insert: {
+          id?: number
+          titulo: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          titulo?: string
+          created_at?: string
+        }
+      }
+      topicos_duvidas: {
+        Row: {
+          id: number
+          titulo: string
+          status: string
+          created_at: string
+          // adicione outros campos conforme necessário
+        }
+        Insert: {
+          id?: number
+          titulo: string
+          status: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          titulo?: string
+          status?: string
+          created_at?: string
+        }
+      }
+      usuarios: {
+        Row: {
+          id: number
+          tipo: string
+          created_at: string
+          // adicione outros campos conforme necessário
+        }
+        Insert: {
+          id?: number
+          tipo: string
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          tipo?: string
+          created_at?: string
         }
       }
     }
