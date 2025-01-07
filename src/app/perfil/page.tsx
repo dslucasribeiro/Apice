@@ -96,7 +96,7 @@ export default function Perfil() {
   };
 
   useEffect(() => {
-    console.log('Users state updated:', users);
+    //console.log('Users state updated:', users);
   }, [users]);
 
   // Funções de formatação

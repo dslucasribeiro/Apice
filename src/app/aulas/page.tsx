@@ -24,16 +24,16 @@ export default function Aulas() {
   const supabase = createSupabaseClient();
 
   useEffect(() => {
-    console.log('Iniciando carregamento da página de aulas...');
+    //console.log('Iniciando carregamento da página de aulas...');
     fetchAulas();
     fetchUserData();
   }, []);
 
   const fetchUserData = async () => {
     try {
-      console.log('Iniciando fetchUserData...');
+      //console.log('Iniciando fetchUserData...');
       const { data: { user }, error } = await supabase.auth.getUser();
-      console.log('Dados do auth.getUser:', { user, error });
+      //console.log('Dados do auth.getUser:', { user, error });
       
       if (error) {
         console.error('Erro ao buscar usuário autenticado:', error);
@@ -41,14 +41,14 @@ export default function Aulas() {
       }
       
       if (user) {
-        console.log('ID do usuário autenticado:', user.id);
+        //console.log('ID do usuário autenticado:', user.id);
         const { data: userData, error: userError } = await supabase
           .from('usuarios')
           .select('id, tipo')
           .eq('user_id', user.id)
           .single();
 
-        console.log('Resultado da consulta na tabela usuarios:', { userData, userError });
+        //console.log('Resultado da consulta na tabela usuarios:', { userData, userError });
 
         if (userError) {
           console.error('Erro ao buscar dados do usuário na tabela usuarios:', userError);
@@ -56,14 +56,14 @@ export default function Aulas() {
         }
         
         if (userData) {
-          console.log('Dados do usuário encontrados:', {
-            id: userData.id,
-            tipo: userData.tipo,
-            user_id: user.id
-          });
+          //console.log('Dados do usuário encontrados:', {
+          //  id: userData.id,
+          //  tipo: userData.tipo,
+          //  user_id: user.id
+          //});
           setUserId(userData.id);
           setUserType(userData.tipo || '');
-          console.log('Estado atualizado - userType:', userData.tipo);
+          //console.log('Estado atualizado - userType:', userData.tipo);
         } else {
           console.log('Nenhum dado de usuário encontrado na tabela usuarios');
         }

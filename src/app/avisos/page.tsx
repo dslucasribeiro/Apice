@@ -39,11 +39,11 @@ export default function Avisos() {
             .eq('user_id', authUser.id)
             .single();
 
-          console.log('User Data:', userData);
+          //console.log('User Data:', userData);
           
           if (userData) {
             setUserType(userData.tipo || '');
-            console.log('User type:', userData.tipo);
+            //console.log('User type:', userData.tipo);
           }
         }
       } catch (error) {

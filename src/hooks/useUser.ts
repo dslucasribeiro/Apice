@@ -16,7 +16,7 @@ export function useUser() {
       try {
         const supabase = createSupabaseClient();
         const { data: { user: authUser } } = await supabase.auth.getUser();
-        console.log('Auth User:', authUser);
+        //console.log('Auth User:', authUser);
 
         if (authUser) {
           const { data: userData, error } = await supabase
@@ -25,8 +25,8 @@ export function useUser() {
             .eq('user_id', authUser.id)
             .single();
 
-          console.log('User Data:', userData);
-          console.log('Error:', error);
+          //console.log('User Data:', userData);
+          //console.log('Error:', error);
 
           if (userData) {
             const userInfo = {
@@ -34,7 +34,7 @@ export function useUser() {
               email: userData.email,
               tipo: userData.tipo
             };
-            console.log('Setting user:', userInfo);
+            //console.log('Setting user:', userInfo);
             setUser(userInfo);
           }
         }
