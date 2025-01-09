@@ -28,18 +28,18 @@ export default function Navigation() {
   };
 
   const menuItems = [
-    { name: 'Dashboard', href: '/' },
-    { name: 'Alunos', href: '/alunos' },
-    { name: 'Avisos', href: '/avisos' },
-    { name: 'Simulados', href: '/simulados', adminOnly: true },
-    { name: 'Materiais', href: '/materiais' },
-    { name: 'Dúvidas', href: '/duvidas' },
-    { name: 'Perfil', href: '/perfil' },
+    { name: 'Dashboard', href: '/', adminOnly: true },
+    { name: 'Alunos', href: '/alunos', adminOnly: true },
+    { name: 'Avisos', href: '/avisos', adminOnly: false },
+    { name: 'Simulados', href: '/simulados', adminOnly: false },
+    { name: 'Materiais', href: '/materiais', adminOnly: false },
+    { name: 'Dúvidas', href: '/duvidas', adminOnly: false },
+    { name: 'Perfil', href: '/perfil', adminOnly: false }
   ];
 
   const filteredMenuItems = user ? menuItems.filter(item => 
-    user.tipo === 'Admin' || !item.adminOnly
-  ) : menuItems.filter(item => !item.adminOnly);
+    user.tipo === 'Admin' ? true : !item.adminOnly
+  ) : [];
 
   if (!isClient || loading) {
     return <div className="bg-gray-900 border-b border-blue-800 h-16"></div>;
