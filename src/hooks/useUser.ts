@@ -7,26 +7,35 @@ interface User {
   tipo: string;
 }
 
+// Cache global para o usuário
+let globalUser: User | null = null;
+let globalLoading = true;
+const listeners = new Set<(user: User | null) => void>();
+
+const updateGlobalUser = (user: User | null) => {
+  globalUser = user;
+  globalLoading = false;
+  listeners.forEach(listener => listener(user));
+};
+
 export function useUser() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(globalUser);
+  const [loading, setLoading] = useState(globalLoading);
 
   useEffect(() => {
     async function getUser() {
+      if (!globalLoading && globalUser === user) return;
+
       try {
         const supabase = createSupabaseClient();
         const { data: { user: authUser } } = await supabase.auth.getUser();
-        //console.log('Auth User:', authUser);
 
         if (authUser) {
-          const { data: userData, error } = await supabase
+          const { data: userData } = await supabase
             .from('usuarios')
             .select('id, email, tipo')
             .eq('user_id', authUser.id)
             .single();
-
-          //console.log('User Data:', userData);
-          //console.log('Error:', error);
 
           if (userData) {
             const userInfo = {
@@ -34,19 +43,50 @@ export function useUser() {
               email: userData.email,
               tipo: userData.tipo
             };
-            //console.log('Setting user:', userInfo);
+            updateGlobalUser(userInfo);
             setUser(userInfo);
+          } else {
+            updateGlobalUser(null);
+            setUser(null);
           }
+        } else {
+          updateGlobalUser(null);
+          setUser(null);
         }
       } catch (error) {
         console.error('Error fetching user:', error);
+        updateGlobalUser(null);
+        setUser(null);
       } finally {
         setLoading(false);
+        globalLoading = false;
       }
     }
 
-    getUser();
-  }, []);
+    // Adiciona listener para atualizações
+    listeners.add(setUser);
+    
+    // Se não tiver usuário em cache, busca
+    if (globalLoading) {
+      getUser();
+    }
+
+    const supabase = createSupabaseClient();
+    
+    // Escuta mudanças na autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        updateGlobalUser(null);
+      } else if (event === 'SIGNED_IN') {
+        getUser();
+      }
+    });
+
+    return () => {
+      listeners.delete(setUser);
+      subscription?.unsubscribe();
+    };
+  }, [user]);
 
   return { user, loading };
 }

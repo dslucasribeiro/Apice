@@ -49,27 +49,24 @@ export default function Home() {
   const supabase = createSupabaseClient();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    checkUser();
-    fetchDashboardStats();
-  }, []);
-
-  const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      router.push('/login');
-    }
-  };
-
-  const fetchDashboardStats = async () => {
-    try {
+    const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/login');
         return;
       }
+      setIsAuthenticated(true);
+      fetchDashboardStats();
+    };
 
+    checkAuth();
+  }, [router, supabase.auth]);
+
+  const fetchDashboardStats = async () => {
+    try {
       const { data: usuarios } = await supabase.from('usuarios').select('*');
       const { data: aulas } = await supabase.from('aulas').select('*');
       const { data: materiais } = await supabase.from('materiais_didaticos').select('*');
@@ -124,7 +121,7 @@ export default function Home() {
     }
   };
 
-  if (loading) {
+  if (loading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900">
         <Navigation />

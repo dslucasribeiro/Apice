@@ -3,27 +3,21 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { createSupabaseClient } from '@/lib/supabase';
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
+import { useUser } from '@/hooks/useUser';
 
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const supabase = createSupabaseClient();
   const pathname = usePathname();
-  const [userType, setUserType] = useState<string | null>(null);
+  const { user, loading } = useUser();
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    const storedUserType = localStorage.getItem('userType');
-    if (storedUserType) {
-      setUserType(storedUserType);
-    } else {
-      fetchUserType();
-    }
   }, []);
 
   const handleSignOut = async () => {
-    localStorage.removeItem('userType');
     await supabase.auth.signOut();
     router.push('/login');
   };
@@ -33,36 +27,27 @@ export default function Navigation() {
     window.open(`https://api.whatsapp.com/send?phone=5591984559727&text=${message}`, '_blank');
   };
 
-  const fetchUserType = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: userData } = await supabase
-        .from('usuarios')
-        .select('tipo')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (userData) {
-        setUserType(userData.tipo);
-        localStorage.setItem('userType', userData.tipo);
-      }
-    }
-  };
-
   const menuItems = [
-    { href: '/', label: 'Dashboard', adminOnly: true },
-    { href: '/alunos', label: 'Alunos', adminOnly: true },
-    { href: '/avisos', label: 'Avisos', adminOnly: false },
-    { href: '/aulas', label: 'Aulas', adminOnly: false },
-    { href: '/simulados', label: 'Simulados', adminOnly: false },
-    { href: '/materiais', label: 'Material Didático', adminOnly: false },
-    { href: '/duvidas', label: 'Dúvidas', adminOnly: false },
-    { href: '/perfil', label: 'Identificação Acadêmica', adminOnly: false }
+    { name: 'Dashboard', href: '/' },
+    { name: 'Alunos', href: '/alunos' },
+    { name: 'Avisos', href: '/avisos' },
+    { name: 'Simulados', href: '/simulados', adminOnly: true },
+    { name: 'Materiais', href: '/materiais' },
+    { name: 'Dúvidas', href: '/duvidas' },
+    { name: 'Perfil', href: '/perfil' },
   ];
 
-  const filteredMenuItems = isClient ? menuItems.filter(item => 
-    userType === 'Admin' || !item.adminOnly
+  const filteredMenuItems = user ? menuItems.filter(item => 
+    user.tipo === 'Admin' || !item.adminOnly
   ) : menuItems.filter(item => !item.adminOnly);
+
+  if (!isClient || loading) {
+    return <div className="bg-gray-900 border-b border-blue-800 h-16"></div>;
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <nav className="bg-gray-900 border-b border-blue-800">
@@ -71,7 +56,7 @@ export default function Navigation() {
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <Link 
-                href={userType === 'Aluno' ? '/perfil' : '/'} 
+                href={user.tipo === 'Aluno' ? '/perfil' : '/'} 
                 className="text-2xl font-bold text-blue-500"
               >
                 Ápice
@@ -87,7 +72,7 @@ export default function Navigation() {
                       pathname === item.href ? 'bg-gray-800 text-white' : ''
                     }`}
                   >
-                    {item.label}
+                    {item.name}
                   </Link>
                 ))}
               </div>
@@ -163,7 +148,7 @@ export default function Navigation() {
                   pathname === item.href ? 'bg-gray-800 text-white' : ''
                 }`}
               >
-                {item.label}
+                {item.name}
               </Link>
             ))}
             <button
