@@ -18,6 +18,13 @@ const updateGlobalUser = (user: User | null) => {
   listeners.forEach(listener => listener(user));
 };
 
+// Função para reiniciar o estado global
+const resetGlobalState = () => {
+  globalUser = null;
+  globalLoading = true;
+  listeners.forEach(listener => listener(null));
+};
+
 export function useUser() {
   const [user, setUser] = useState<User | null>(globalUser);
   const [loading, setLoading] = useState(globalLoading);
@@ -46,38 +53,35 @@ export function useUser() {
             updateGlobalUser(userInfo);
             setUser(userInfo);
           } else {
-            updateGlobalUser(null);
+            resetGlobalState();
             setUser(null);
           }
         } else {
-          updateGlobalUser(null);
+          resetGlobalState();
           setUser(null);
         }
       } catch (error) {
         console.error('Error fetching user:', error);
-        updateGlobalUser(null);
+        resetGlobalState();
         setUser(null);
       } finally {
         setLoading(false);
-        globalLoading = false;
       }
     }
 
-    // Adiciona listener para atualizações
     listeners.add(setUser);
     
-    // Se não tiver usuário em cache, busca
     if (globalLoading) {
       getUser();
     }
 
     const supabase = createSupabaseClient();
     
-    // Escuta mudanças na autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        updateGlobalUser(null);
-      } else if (event === 'SIGNED_IN') {
+        resetGlobalState();
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        resetGlobalState(); // Reseta o estado antes de buscar o novo usuário
         getUser();
       }
     });
@@ -86,7 +90,7 @@ export function useUser() {
       listeners.delete(setUser);
       subscription?.unsubscribe();
     };
-  }, [user]);
+  }, []);
 
   return { user, loading };
 }

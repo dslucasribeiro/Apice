@@ -31,6 +31,7 @@ export default function Navigation() {
     { name: 'Dashboard', href: '/', adminOnly: true },
     { name: 'Alunos', href: '/alunos', adminOnly: true },
     { name: 'Avisos', href: '/avisos', adminOnly: false },
+    { name: 'Aulas', href: '/aulas', adminOnly: false },
     { name: 'Simulados', href: '/simulados', adminOnly: false },
     { name: 'Materiais', href: '/materiais', adminOnly: false },
     { name: 'Dúvidas', href: '/duvidas', adminOnly: false },
