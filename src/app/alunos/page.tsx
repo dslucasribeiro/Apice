@@ -187,7 +187,7 @@ export default function Alunos() {
       // 1. Primeiro, criar o usuário no auth
       const { data: authUser, error: authError } = await supabase.auth.signUp({
         email: userToSave.email,
-        password: userToSave.cpf, // Usando CPF como senha padrão
+        password: '123456', // Senha padrão alterada para '123456'
         options: {
           data: {
             nome: userToSave.nome,

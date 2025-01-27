@@ -39,6 +39,13 @@ export default function Perfil() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [selectedUserForPassword, setSelectedUserForPassword] = useState<UserProfile | null>(null);
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
   const itemsPerPage = 10;
   const supabase = createSupabaseClient();
 
@@ -283,6 +290,69 @@ export default function Perfil() {
     }
   };
 
+  const handlePasswordModalOpen = (user: UserProfile) => {
+    setSelectedUserForPassword(user);
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    if (!selectedUserForPassword) return;
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('As senhas não coincidem');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError('A nova senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      // Se for admin alterando senha de outro usuário
+      if (userType === 'Admin' && currentUser?.id !== selectedUserForPassword.user_id) {
+        // Usar o endpoint da API para alterar a senha
+        const response = await fetch('/api/users/update-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: selectedUserForPassword.user_id,
+            newPassword: passwordData.newPassword
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Erro ao alterar senha');
+        }
+      } else {
+        // Se for o próprio usuário alterando sua senha
+        const { error } = await supabase.auth.updateUser({
+          password: passwordData.newPassword
+        });
+        if (error) throw error;
+      }
+
+      alert('Senha alterada com sucesso!');
+      setShowPasswordModal(false);
+      setPasswordData({
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setSelectedUserForPassword(null);
+    } catch (error: any) {
+      console.error('Erro ao alterar senha:', error);
+      setPasswordError(error.message);
+    }
+  };
+
   // Cleanup function para liberar as URLs de preview
   useEffect(() => {
     return () => {
@@ -371,6 +441,12 @@ export default function Perfil() {
                 <p className="text-blue-400 mb-2">Contato</p>
                 <p className="mb-1">{formatPhone(user.celular)}</p>
                 <p className="break-all">{user.email || 'Email não informado'}</p>
+                <button
+                  onClick={() => handlePasswordModalOpen(user)}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  Alterar Senha
+                </button>
               </div>
 
               {/* QR Code decorativo */}
@@ -644,6 +720,69 @@ export default function Perfil() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Alteração de Senha */}
+      {showPasswordModal && selectedUserForPassword && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-semibold text-white mb-4">
+              {userType === 'Admin' 
+                ? `Alterar Senha - ${selectedUserForPassword.nome}`
+                : 'Alterar Senha'}
+            </h3>
+            <form onSubmit={handlePasswordChange}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Nova Senha</label>
+                  <input
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                    className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                    minLength={6}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Confirmar Nova Senha</label>
+                  <input
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                    className="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                    minLength={6}
+                  />
+                </div>
+              </div>
+
+              {passwordError && (
+                <div className="mt-4 text-red-500 text-sm">{passwordError}</div>
+              )}
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setSelectedUserForPassword(null);
+                    setPasswordData({ newPassword: '', confirmPassword: '' });
+                  }}
+                  className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
