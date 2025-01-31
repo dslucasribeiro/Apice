@@ -178,10 +178,22 @@ export default function Alunos() {
 
   const handleSubmit = async () => {
     try {
+      // Validar apenas nome e email
+      if (!newUser.nome || !newUser.email) {
+        alert('Nome e email são campos obrigatórios.');
+        return;
+      }
+
       const userToSave = {
         ...newUser,
-        cpf: newUser.cpf.replace(/\D/g, ''),
-        celular: newUser.celular.replace(/\D/g, ''),
+        cpf: newUser.cpf ? newUser.cpf.replace(/\D/g, '') : '',
+        celular: newUser.celular ? newUser.celular.replace(/\D/g, '') : '',
+        rg: newUser.rg || '',
+        data_nasc: newUser.data_nasc || null,
+        ano_conclusao_ensino_medio: newUser.ano_conclusao_ensino_medio || new Date().getFullYear().toString(),
+        responsavel_financeiro: newUser.responsavel_financeiro || 'Eu mesmo',
+        tipo: newUser.tipo || 'Aluno',
+        status: 'ativo'
       };
 
       // 1. Primeiro, criar o usuário no auth
@@ -195,7 +207,11 @@ export default function Alunos() {
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('Erro ao criar usuário no auth:', authError);
+        alert('Erro ao criar usuário. Por favor, verifique se o email já está cadastrado.');
+        return;
+      }
 
       if (!authUser.user?.id) {
         throw new Error('Erro ao criar usuário no auth');
@@ -206,14 +222,16 @@ export default function Alunos() {
         .from('usuarios')
         .insert([{
           ...userToSave,
-          user_id: authUser.user.id, // Vinculando com o UUID do auth
+          user_id: authUser.user.id,
         }])
         .select();
 
       if (error) {
         // Se houver erro, tentar deletar o usuário criado no auth
         await supabase.auth.admin.deleteUser(authUser.user.id);
-        throw error;
+        console.error('Erro ao salvar usuário:', error);
+        alert('Erro ao salvar usuário. Por favor, tente novamente.');
+        return;
       }
 
       if (data) {
@@ -435,6 +453,7 @@ export default function Alunos() {
                     name="nome"
                     value={newUser.nome}
                     onChange={handleInputChange}
+                    required
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -490,6 +509,7 @@ export default function Alunos() {
                     name="email"
                     value={newUser.email}
                     onChange={handleInputChange}
+                    required
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
