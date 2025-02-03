@@ -75,12 +75,20 @@ export default function Aulas() {
     }
   };
 
-  // Função para extrair o ID do vídeo do YouTube da URL
-  const getYouTubeEmbedUrl = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    const videoId = match && match[2].length === 11 ? match[2] : null;
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+  // Função para gerar o código de embed do Panda Video
+  const getPandaVideoEmbedCode = (urlOrId: string) => {
+    // Se for uma URL completa, extrair o ID, caso contrário usar o valor como ID
+    const videoId = urlOrId.includes('/') ? urlOrId.split('/').pop() : urlOrId;
+    
+    // Validar se o ID tem o formato correto (UUID)
+    const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(videoId || '');
+    
+    if (!videoId || !isValidUUID) {
+      console.error('ID do vídeo inválido:', videoId);
+      return '';
+    }
+
+    return `<div style="position:relative;padding-top:56.25%;"><iframe id="panda-${videoId}" src="https://player-vz-bc721c9c-237.tv.pandavideo.com.br/embed/?v=${videoId}" style="border:none;position:absolute;top:0;left:0;" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowfullscreen=true width="100%" height="100%" fetchpriority="high"></iframe></div>`;
   };
 
   const handleAddComentario = async () => {
@@ -423,11 +431,9 @@ export default function Aulas() {
             </div>
 
             <div className="relative pb-[56.25%] mb-8">
-              <iframe
-                src={getYouTubeEmbedUrl(aulaAberta.url_video)}
-                className="absolute top-0 left-0 w-full h-full rounded-lg"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
+              <div 
+                className="absolute top-0 left-0 w-full h-full"
+                dangerouslySetInnerHTML={{ __html: getPandaVideoEmbedCode(aulaAberta.url_video) }}
               />
             </div>
 

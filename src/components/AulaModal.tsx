@@ -133,11 +133,11 @@ export default function AulaModal({ isOpen, onClose, aula, onSuccess }: AulaModa
                 URL do Vídeo
               </label>
               <input
-                type="url"
+                type="text"
                 value={formData.url_video}
                 onChange={(e) => setFormData({ ...formData, url_video: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                placeholder="URL do YouTube"
+                placeholder="Cole o ID do vídeo do Panda (ex: 952a06f4-df4e-421a-ae66-d8ed4d6491aa)"
                 required
               />
             </div>
