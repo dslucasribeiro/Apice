@@ -315,90 +315,21 @@ export default function Simulados() {
     );
   };
 
-  const getGoogleDriveViewUrl = (url: string) => {
-    // Extrai o ID do arquivo do Google Drive da URL
-    const fileId = url.match(/[-\w]{25,}/);
-    if (!fileId) return url;
-    return `https://drive.google.com/file/d/${fileId[0]}/preview`;
-  };
+  const getPandaVideoEmbedCode = (urlOrId: string) => {
+    // Extrai o ID do vídeo da URL ou usa o próprio ID se for fornecido diretamente
+    const videoId = urlOrId.includes('pandavideo.com.br')
+      ? urlOrId.split('v=').pop() || urlOrId
+      : urlOrId;
 
-  const getYoutubeEmbedUrl = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return match && match[2].length === 11
-      ? `https://www.youtube.com/embed/${match[2]}`
-      : url;
-  };
-
-  const SimuladoCard = ({ simulado, onDelete }: { simulado: Simulado; onDelete: () => void }) => {
-    const isAdmin = userType?.toLowerCase() === 'admin';
-
-    return (
-      <div className="bg-gray-800 rounded-lg p-6 relative">
-        {isAdmin && (
-          <button
-            onClick={onDelete}
-            className="absolute top-4 right-4 text-red-500 hover:text-red-600"
-          >
-            <TrashIcon className="h-5 w-5" />
-          </button>
-        )}
-        
-        <div className="flex flex-col space-y-4">
-          <div className="flex items-center space-x-3">
-            <DocumentIcon className="h-6 w-6 text-blue-400 flex-shrink-0" />
-            <div>
-              <h3 className="text-xl font-semibold text-white">{simulado.titulo}</h3>
-              {simulado.descricao && (
-                <p className="text-gray-400 text-sm">{simulado.descricao}</p>
-              )}
-            </div>
-          </div>
-
-          {simulado.video_resolucao && (
-            <div className="flex items-center space-x-3">
-              <PlayCircleIcon className="h-6 w-6 text-purple-400 flex-shrink-0" />
-              <p className="text-gray-400 text-sm">Vídeo com resolução disponível</p>
-            </div>
-          )}
-          
-          <div className="flex space-x-2">
-            <button
-              onClick={() => abrirPdf(simulado.pdf_questoes, simulado.download_permitido)}
-              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm"
-            >
-              <DocumentIcon className="h-5 w-5" />
-              <span>Questões</span>
-            </button>
-            
-            <button
-              onClick={() => abrirPdf(simulado.pdf_gabarito, simulado.download_permitido)}
-              className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm"
-            >
-              <DocumentCheckIcon className="h-5 w-5" />
-              <span>Gabarito</span>
-            </button>
-            
-            {simulado.video_resolucao && (
-              <button
-                onClick={() => abrirResolucao(simulado)}
-                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-md text-sm"
-              >
-                <PlayCircleIcon className="h-5 w-5" />
-                <span>Resolução</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    // Retorna o código de embed do Panda Video
+    return `<div style="position:relative;padding-top:56.25%;"><iframe id="panda-${videoId}" src="https://player-vz-bc721c9c-237.tv.pandavideo.com.br/embed/?v=${videoId}" style="border:none;position:absolute;top:0;left:0;" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowfullscreen=true width="100%" height="100%" fetchpriority="high"></iframe></div>`;
   };
 
   const abrirResolucao = (simulado: Simulado) => {
     if (!simulado.video_resolucao) return;
     setSimuladoSelecionado({
       ...simulado,
-      video_resolucao: getYoutubeEmbedUrl(simulado.video_resolucao)
+      video_resolucao: simulado.video_resolucao // Não precisa mais transformar a URL
     });
     setIsModalResolucaoOpen(true);
   };
@@ -611,11 +542,66 @@ export default function Simulados() {
             ))}
 
             {simulados.map((simulado) => (
-              <SimuladoCard
+              <div
                 key={simulado.id}
-                simulado={simulado}
-                onDelete={() => handleDeleteSimulado(simulado.id)}
-              />
+                className="bg-gray-800 rounded-lg p-6 relative"
+              >
+                {userType?.toLowerCase() === 'admin' && (
+                  <button
+                    onClick={() => handleDeleteSimulado(simulado.id)}
+                    className="absolute top-4 right-4 text-red-500 hover:text-red-600"
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
+                )}
+                
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <DocumentIcon className="h-6 w-6 text-blue-400 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-xl font-semibold text-white">{simulado.titulo}</h3>
+                      {simulado.descricao && (
+                        <p className="text-gray-400 text-sm">{simulado.descricao}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {simulado.video_resolucao && (
+                    <div className="flex items-center space-x-3">
+                      <PlayCircleIcon className="h-6 w-6 text-purple-400 flex-shrink-0" />
+                      <p className="text-gray-400 text-sm">Vídeo com resolução disponível</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => abrirPdf(simulado.pdf_questoes, simulado.download_permitido)}
+                      className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm"
+                    >
+                      <DocumentIcon className="h-5 w-5" />
+                      <span>Questões</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => abrirPdf(simulado.pdf_gabarito, simulado.download_permitido)}
+                      className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm"
+                    >
+                      <DocumentCheckIcon className="h-5 w-5" />
+                      <span>Gabarito</span>
+                    </button>
+                    
+                    {simulado.video_resolucao && (
+                      <button
+                        onClick={() => abrirResolucao(simulado)}
+                        className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-md text-sm"
+                      >
+                        <PlayCircleIcon className="h-5 w-5" />
+                        <span>Resolução</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -754,7 +740,7 @@ export default function Simulados() {
                     value={novoSimulado.videoResolucao}
                     onChange={(e) => setNovoSimulado({ ...novoSimulado, videoResolucao: e.target.value })}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
-                    placeholder="URL do YouTube"
+                    placeholder="Cole o ID do vídeo do Panda (ex: 952a06f4-df4e-421a-ae66-d8ed4d6491aa)"
                   />
                 </div>
 
@@ -828,15 +814,11 @@ export default function Simulados() {
                 </svg>
               </button>
             </div>
-            <div className="relative pt-[56.25%] bg-black rounded-lg overflow-hidden">
+            <div className="relative pb-[56.25%] bg-black rounded-lg overflow-hidden">
               {simuladoSelecionado.video_resolucao && (
-                <iframe
-                  className="absolute inset-0 w-full h-full"
-                  src={simuladoSelecionado.video_resolucao}
-                  title="Resolução do Simulado"
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+                <div 
+                  className="absolute top-0 left-0 w-full h-full"
+                  dangerouslySetInnerHTML={{ __html: getPandaVideoEmbedCode(simuladoSelecionado.video_resolucao) }}
                 />
               )}
             </div>
