@@ -39,6 +39,10 @@ export default function Materiais() {
   const [breadcrumbs, setBreadcrumbs] = useState<Pasta[]>([]);
   const [isModalPastaOpen, setIsModalPastaOpen] = useState(false);
   const [isModalMaterialOpen, setIsModalMaterialOpen] = useState(false);
+  const [novaPasta, setNovaPasta] = useState({
+    titulo: '',
+    descricao: '',
+  });
   const [novoMaterial, setNovoMaterial] = useState({
     titulo: '',
     descricao: '',
@@ -301,6 +305,40 @@ export default function Materiais() {
     } catch (error) {
       console.error('Erro ao excluir pasta:', error);
       alert('Erro ao excluir pasta. Por favor, tente novamente.');
+    }
+  };
+
+  const handleAddPasta = async () => {
+    if (!novaPasta.titulo.trim() || userType?.toLowerCase() !== 'admin') return;
+
+    const supabase = createSupabaseClient();
+    try {
+      const { data: pasta, error } = await supabase
+        .from('material_pastas')
+        .insert([
+          {
+            titulo: novaPasta.titulo.trim(),
+            descricao: novaPasta.descricao,
+            parent_id: pastaAtual,
+            ordem: pastas.length,
+            ativo: true
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setPastas([...pastas, pasta]);
+      setIsModalPastaOpen(false);
+      setNovaPasta({
+        titulo: '',
+        descricao: '',
+      });
+
+    } catch (error) {
+      console.error('Erro ao criar pasta:', error);
+      alert('Erro ao criar pasta. Por favor, tente novamente.');
     }
   };
 
@@ -756,6 +794,41 @@ export default function Materiais() {
                 ) : (
                   <span>Salvar Material</span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Nova Pasta */}
+      {isModalPastaOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold text-white mb-4">Nova Pasta</h2>
+            <input
+              type="text"
+              placeholder="Título da pasta"
+              className="w-full p-2 mb-4 bg-gray-700 text-white rounded"
+              value={novaPasta.titulo}
+              onChange={(e) => setNovaPasta({ ...novaPasta, titulo: e.target.value })}
+            />
+            <textarea
+              placeholder="Descrição (opcional)"
+              className="w-full p-2 mb-4 bg-gray-700 text-white rounded"
+              value={novaPasta.descricao}
+              onChange={(e) => setNovaPasta({ ...novaPasta, descricao: e.target.value })}
+            />
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setIsModalPastaOpen(false)}
+                className="px-4 py-2 text-gray-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddPasta}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+              >
+                Criar
               </button>
             </div>
           </div>
