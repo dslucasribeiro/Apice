@@ -464,7 +464,19 @@ export default function Simulados() {
                   Novo Simulado
                 </button>
               )}
+              <button
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md"
+              >
+                Adicionar Resultado
+              </button>
             </div>
+          )}
+          {userType?.toLowerCase() === 'aluno' && (
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+            >
+              Ver Resultado
+            </button>
           )}
         </div>
 
