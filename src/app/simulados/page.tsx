@@ -33,6 +33,17 @@ interface StorageError {
   statusCode?: string;
 }
 
+interface Aluno {
+  id: number;
+  nome: string;
+}
+
+interface NovoResultado {
+  arquivoResultado: File | null;
+  mes: string;
+  alunoId: string;
+}
+
 export default function Simulados() {
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [simulados, setSimulados] = useState<Simulado[]>([]);
@@ -66,10 +77,24 @@ export default function Simulados() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [isEditingPasta, setIsEditingPasta] = useState<number | null>(null);
   const [editPastaTitle, setEditPastaTitle] = useState('');
+  const [isModalResultadoOpen, setIsModalResultadoOpen] = useState(false);
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [novoResultado, setNovoResultado] = useState<NovoResultado>({
+    arquivoResultado: null,
+    mes: '',
+    alunoId: ''
+  });
+  const [searchAluno, setSearchAluno] = useState('');
+  const [showAlunoDropdown, setShowAlunoDropdown] = useState(false);
+
+  const alunosFiltrados = alunos.filter(aluno => 
+    aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
+  );
 
   useEffect(() => {
     fetchUserType();
     carregarConteudo();
+    carregarAlunos();
   }, [pastaAtual]);
 
   const fetchUserType = async () => {
@@ -413,6 +438,70 @@ export default function Simulados() {
     }
   };
 
+  const carregarAlunos = async () => {
+    const supabase = createSupabaseClient();
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('id, nome')
+      .eq('tipo', 'Aluno')
+      .order('nome');
+
+    if (error) {
+      console.error('Erro ao carregar alunos:', error);
+      return;
+    }
+
+    setAlunos(data || []);
+  };
+
+  const handleAddResultado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!novoResultado.arquivoResultado || !novoResultado.mes || !novoResultado.alunoId) {
+      alert('Por favor, preencha todos os campos');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const supabase = createSupabaseClient();
+      const fileExt = novoResultado.arquivoResultado.name.split('.').pop();
+      const fileName = `${Date.now()}_resultado_${novoResultado.alunoId}_${novoResultado.mes}.${fileExt}`;
+
+      // Upload do arquivo PDF
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('resultados')
+        .upload(fileName, novoResultado.arquivoResultado);
+
+      if (uploadError) throw uploadError;
+
+      // Salvar referência no banco de dados
+      const { error: dbError } = await supabase
+        .from('resultados_simulados')
+        .insert({
+          aluno_id: parseInt(novoResultado.alunoId),
+          mes: novoResultado.mes,
+          arquivo_url: uploadData.path
+        });
+
+      if (dbError) throw dbError;
+
+      // Limpar o formulário e fechar o modal
+      setNovoResultado({
+        arquivoResultado: null,
+        mes: '',
+        alunoId: ''
+      });
+      setIsModalResultadoOpen(false);
+      alert('Resultado adicionado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao adicionar resultado:', error);
+      alert('Erro ao adicionar resultado. Por favor, tente novamente.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -465,6 +554,7 @@ export default function Simulados() {
                 </button>
               )}
               <button
+                onClick={() => setIsModalResultadoOpen(true)}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md"
               >
                 Adicionar Resultado
@@ -797,8 +887,8 @@ export default function Simulados() {
                 {uploading ? (
                   <>
                     <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                     <span>Adicionando...</span>
                   </>
@@ -840,6 +930,138 @@ export default function Simulados() {
 
       {showPdfModal && selectedPdf && (
         <PdfModal url={selectedPdf} onClose={() => setShowPdfModal(false)} />
+      )}
+
+      {isModalResultadoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-white">Adicionar Resultado</h2>
+                <button onClick={() => setIsModalResultadoOpen(false)} className="text-gray-400 hover:text-white">
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form className="space-y-4" onSubmit={handleAddResultado}>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Arquivo PDF
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={(e) => setNovoResultado({
+                      ...novoResultado,
+                      arquivoResultado: e.target.files?.[0] || null
+                    })}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Mês
+                  </label>
+                  <select
+                    value={novoResultado.mes}
+                    onChange={(e) => setNovoResultado({
+                      ...novoResultado,
+                      mes: e.target.value
+                    })}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Selecione o mês</option>
+                    <option value="Janeiro">Janeiro</option>
+                    <option value="Fevereiro">Fevereiro</option>
+                    <option value="Março">Março</option>
+                    <option value="Abril">Abril</option>
+                    <option value="Maio">Maio</option>
+                    <option value="Junho">Junho</option>
+                    <option value="Julho">Julho</option>
+                    <option value="Agosto">Agosto</option>
+                    <option value="Setembro">Setembro</option>
+                    <option value="Outubro">Outubro</option>
+                    <option value="Novembro">Novembro</option>
+                    <option value="Dezembro">Dezembro</option>
+                  </select>
+                </div>
+
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Aluno
+                  </label>
+                  <input
+                    type="text"
+                    value={searchAluno}
+                    onChange={(e) => {
+                      setSearchAluno(e.target.value);
+                      setShowAlunoDropdown(true);
+                    }}
+                    onFocus={() => setShowAlunoDropdown(true)}
+                    placeholder="Digite para buscar um aluno"
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  />
+                  {showAlunoDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-auto">
+                      {alunosFiltrados.map((aluno) => (
+                        <button
+                          key={aluno.id}
+                          type="button"
+                          className="w-full px-4 py-2 text-left text-white hover:bg-gray-600 focus:outline-none"
+                          onClick={() => {
+                            setNovoResultado({
+                              ...novoResultado,
+                              alunoId: aluno.id.toString()
+                            });
+                            setSearchAluno(aluno.nome);
+                            setShowAlunoDropdown(false);
+                          }}
+                        >
+                          {aluno.nome}
+                        </button>
+                      ))}
+                      {alunosFiltrados.length === 0 && (
+                        <div className="px-4 py-2 text-gray-400">
+                          Nenhum aluno encontrado
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalResultadoOpen(false)}
+                    className="px-4 py-2 text-gray-300 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Enviando...</span>
+                      </>
+                    ) : (
+                      'Adicionar'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
