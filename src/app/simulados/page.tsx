@@ -454,10 +454,16 @@ export default function Simulados() {
     setAlunos(data || []);
   };
 
+  const normalizarMes = (mes: string) => {
+    return mes.toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  };
+
   const handleAddResultado = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!novoResultado.arquivoResultado || !novoResultado.mes || !novoResultado.alunoId) {
+    if (!novoResultado.arquivoResultado || !novoResultado.mes || !novoResultado.alunoId || !searchAluno) {
       alert('Por favor, preencha todos os campos');
       return;
     }
@@ -466,25 +472,40 @@ export default function Simulados() {
     try {
       const supabase = createSupabaseClient();
       const fileExt = novoResultado.arquivoResultado.name.split('.').pop();
-      const fileName = `${Date.now()}_resultado_${novoResultado.alunoId}_${novoResultado.mes}.${fileExt}`;
-
-      // Upload do arquivo PDF
+      const mesNormalizado = normalizarMes(novoResultado.mes);
+      const fileName = `resultados/${Date.now()}_resultado_${novoResultado.alunoId}_${mesNormalizado}.${fileExt}`;
+      
+      // Upload do arquivo PDF para o bucket 'resultados'
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('resultados')
-        .upload(fileName, novoResultado.arquivoResultado);
+        .upload(fileName, novoResultado.arquivoResultado, {
+          contentType: 'application/pdf'
+        });
 
       if (uploadError) throw uploadError;
 
+      // Pegar a URL pública do arquivo
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('resultados')
+        .getPublicUrl(uploadData.path);
+
       // Salvar referência no banco de dados
       const { error: dbError } = await supabase
-        .from('resultados_simulados')
-        .insert({
-          aluno_id: parseInt(novoResultado.alunoId),
-          mes: novoResultado.mes,
-          arquivo_url: uploadData.path
-        });
+        .from('resultado_simulado')
+        .insert([{
+          id_aluno: parseInt(novoResultado.alunoId),
+          nome_aluno: searchAluno,
+          mes_simulado: novoResultado.mes,
+          url_simulado: publicUrl
+        }]);
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        await supabase.storage
+          .from('resultados')
+          .remove([uploadData.path]);
+        throw dbError;
+      }
 
       // Limpar o formulário e fechar o modal
       setNovoResultado({
@@ -492,10 +513,10 @@ export default function Simulados() {
         mes: '',
         alunoId: ''
       });
+      setSearchAluno('');
       setIsModalResultadoOpen(false);
       alert('Resultado adicionado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao adicionar resultado:', error);
+    } catch (error: any) {
       alert('Erro ao adicionar resultado. Por favor, tente novamente.');
     } finally {
       setUploading(false);
