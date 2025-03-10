@@ -44,6 +44,13 @@ interface NovoResultado {
   alunoId: string;
 }
 
+interface ResultadoSimulado {
+  id: number;
+  mes_simulado: string;
+  url_simulado: string;
+  created_at: string;
+}
+
 export default function Simulados() {
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [simulados, setSimulados] = useState<Simulado[]>([]);
@@ -86,6 +93,10 @@ export default function Simulados() {
   });
   const [searchAluno, setSearchAluno] = useState('');
   const [showAlunoDropdown, setShowAlunoDropdown] = useState(false);
+  const [isModalVerResultadoOpen, setIsModalVerResultadoOpen] = useState(false);
+  const [resultadosAluno, setResultadosAluno] = useState<ResultadoSimulado[]>([]);
+  const [mesSelecionado, setMesSelecionado] = useState('');
+  const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([]);
 
   const alunosFiltrados = alunos.filter(aluno => 
     aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
@@ -523,6 +534,48 @@ export default function Simulados() {
     }
   };
 
+  const carregarResultadosAluno = async () => {
+    const supabase = createSupabaseClient();
+    
+    // Pegar o user_id do aluno logado
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Buscar o id do aluno na tabela usuarios
+    const { data: userData } = await supabase
+      .from('usuarios')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userData) return;
+
+    // Carregar resultados do aluno
+    const { data: resultados } = await supabase
+      .from('resultado_simulado')
+      .select('*')
+      .eq('id_aluno', userData.id)
+      .order('created_at', { ascending: false });
+
+    if (resultados) {
+      setResultadosAluno(resultados);
+      // Extrair meses únicos dos resultados
+      const mesesUnicos = resultados
+        .map(r => r.mes_simulado)
+        .filter((mes, index, array) => array.indexOf(mes) === index);
+      setMesesDisponiveis(mesesUnicos);
+      // Selecionar o mês mais recente
+      if (mesesUnicos.length > 0) {
+        setMesSelecionado(mesesUnicos[0]);
+      }
+    }
+  };
+
+  const handleVerResultado = () => {
+    carregarResultadosAluno();
+    setIsModalVerResultadoOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -584,6 +637,7 @@ export default function Simulados() {
           )}
           {userType?.toLowerCase() === 'aluno' && (
             <button
+              onClick={handleVerResultado}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
             >
               Ver Resultado
@@ -1080,6 +1134,75 @@ export default function Simulados() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal Ver Resultado */}
+      {isModalVerResultadoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Ver Resultados</h2>
+              <button
+                onClick={() => setIsModalVerResultadoOpen(false)}
+                className="text-gray-400 hover:text-gray-300"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Mês
+                </label>
+                <select
+                  value={mesSelecionado}
+                  onChange={(e) => setMesSelecionado(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                >
+                  {mesesDisponiveis.map((mes) => (
+                    <option key={mes} value={mes}>
+                      {mes}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {mesSelecionado && resultadosAluno.filter(r => r.mes_simulado === mesSelecionado).map((resultado) => (
+                <div key={resultado.id} className="bg-gray-700 p-4 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-white">
+                      {new Date(resultado.created_at).toLocaleDateString('pt-BR')}
+                    </span>
+                    <a
+                      href={resultado.url_simulado}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Visualizar PDF
+                    </a>
+                  </div>
+                </div>
+              ))}
+
+              {(!mesSelecionado || resultadosAluno.filter(r => r.mes_simulado === mesSelecionado).length === 0) && (
+                <p className="text-gray-400 text-center py-4">
+                  Nenhum resultado disponível para este mês.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setIsModalVerResultadoOpen(false)}
+                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
