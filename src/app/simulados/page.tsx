@@ -725,7 +725,7 @@ export default function Simulados() {
       // Recarregar os dados
       carregarConteudo();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar simulado:', error);
       alert('Ocorreu um erro ao salvar o simulado. Por favor, tente novamente.');
     } finally {
@@ -746,6 +746,65 @@ export default function Simulados() {
       setSimuladosDisponiveis(data || []);
     } catch (error) {
       console.error('Erro ao carregar simulados:', error);
+    }
+  };
+
+  // Função para salvar o gabarito no banco de dados
+  const salvarGabarito = async () => {
+    if (!gabarito.simuladoId || gabarito.questoes.length === 0) {
+      alert('Selecione um simulado e adicione pelo menos uma questão.');
+      return;
+    }
+
+    try {
+      const supabase = createSupabaseClient();
+      
+      // Para cada questão no gabarito, salvar na tabela de questões
+      for (const questao of gabarito.questoes) {
+        // 1. Inserir a questão
+        const { data: questaoData, error: questaoError } = await supabase
+          .from('questoes')
+          .insert({
+            "simuladoExistente_id": gabarito.simuladoId,
+            numero: questao.numero,
+            assunto: questao.assunto,
+            dificuldade: questao.dificuldade,
+            enunciado: null // Campo opcional
+          })
+          .select()
+          .single();
+
+        if (questaoError) throw questaoError;
+
+        // 2. Inserir as 5 alternativas (de 'a' a 'e')
+        const alternativas = ['a', 'b', 'c', 'd', 'e'].map(letra => ({
+          questao_id: questaoData.id,
+          "simuladoExistente_id": gabarito.simuladoId,
+          letra: letra,
+          texto: null, // Campo opcional
+          correta: letra === questao.alternativaCorreta
+        }));
+
+        const { error: alternativasError } = await supabase
+          .from('alternativas')
+          .insert(alternativas);
+
+        if (alternativasError) throw alternativasError;
+      }
+
+      alert('Gabarito salvo com sucesso!');
+      // Limpar o formulário e fechar o modal
+      setGabarito({
+        simuladoId: null,
+        questoes: []
+      });
+      setIsModalGabaritoOpen(false);
+      
+      // Recarregar os dados atualizados
+      carregarConteudo();
+    } catch (error: any) {
+      console.error('Erro ao salvar gabarito:', error);
+      alert(`Erro ao salvar o gabarito: ${error.message || 'Verifique o console para mais detalhes.'}`);
     }
   };
 
@@ -1881,12 +1940,7 @@ export default function Simulados() {
                   <button
                     onClick={() => {
                       // Implementação futura para salvar o gabarito
-                      alert('Gabarito salvo com sucesso!');
-                      setGabarito({
-                        simuladoId: null,
-                        questoes: []
-                      });
-                      setIsModalGabaritoOpen(false);
+                      salvarGabarito();
                     }}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
                   >
