@@ -78,6 +78,9 @@ export default function Home() {
         .select('created_at')
         .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
 
+      // Filtrar apenas usuários do tipo 'Aluno'
+      const alunosCount = usuarios?.filter(user => user.tipo === 'Aluno').length || 0;
+
       // Processar comentários por dia
       const comentariosPorDia = comentarios?.reduce((acc: Record<string, number>, { created_at }) => {
         const data = new Date(created_at).toLocaleDateString();
@@ -97,7 +100,7 @@ export default function Home() {
       }));
 
       setStats({
-        totalUsuarios: usuarios?.length || 0,
+        totalUsuarios: alunosCount,
         totalAulas: aulas?.length || 0,
         totalMateriais: materiais?.length || 0,
         totalSimulados: simulados?.length || 0,
