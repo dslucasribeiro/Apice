@@ -101,6 +101,9 @@ export default function Simulados() {
   
   // Estados para criação de simulado com questões
   const [novoSimuladoMes, setNovoSimuladoMes] = useState('');
+  const [novoSimuladoAno, setNovoSimuladoAno] = useState(new Date().getFullYear());
+  const [pastaIdSelecionada, setPastaIdSelecionada] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [questoes, setQuestoes] = useState<{
     numero: number;
     enunciado: string;
@@ -603,6 +606,111 @@ export default function Simulados() {
     setIsModalVerResultadoOpen(true);
   };
 
+  const salvarSimulado = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Criar cliente Supabase
+      const supabase = createSupabaseClient();
+      
+      // Verificar se temos todas as informações necessárias
+      if (!novoSimuladoMes || questoes.length === 0) {
+        alert('Preencha todos os campos obrigatórios e adicione pelo menos uma questão.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // 1. Inserir o simulado na tabela simulados_criados
+      const { data: simuladoCriado, error: simuladoError } = await supabase
+        .from('simulados_criados')
+        .insert({
+          mes: novoSimuladoMes,
+          ano: novoSimuladoAno,
+          pasta_id: pastaIdSelecionada
+        })
+        .select()
+        .single();
+      
+      if (simuladoError) {
+        console.error('Erro ao criar simulado:', simuladoError);
+        alert('Erro ao criar simulado. Por favor, tente novamente.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // 2. Para cada questão, inserir na tabela questoes
+      for (const questao of questoes) {
+        const { data: questaoCriada, error: questaoError } = await supabase
+          .from('questoes')
+          .insert({
+            simulado_id: simuladoCriado.id,
+            numero: questao.numero,
+            enunciado: questao.enunciado,
+            assunto: questao.assunto,
+            dificuldade: questao.dificuldade
+          })
+          .select()
+          .single();
+        
+        if (questaoError) {
+          console.error('Erro ao criar questão:', questaoError);
+          alert('Erro ao criar questões. Por favor, tente novamente.');
+          setIsLoading(false);
+          return;
+        }
+        
+        // 3. Para cada alternativa da questão, inserir na tabela alternativas
+        for (const alternativa of questao.alternativas) {
+          const { error: alternativaError } = await supabase
+            .from('alternativas')
+            .insert({
+              questao_id: questaoCriada.id,
+              letra: alternativa.letra,
+              texto: alternativa.texto,
+              correta: alternativa.correta
+            });
+          
+          if (alternativaError) {
+            console.error('Erro ao criar alternativa:', alternativaError);
+            alert('Erro ao criar alternativas. Por favor, tente novamente.');
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+      
+      alert('Simulado criado com sucesso!');
+      
+      // Limpar o formulário e fechar o modal
+      setNovoSimuladoMes('');
+      setNovoSimuladoAno(new Date().getFullYear());
+      setPastaIdSelecionada(null);
+      setQuestoes([]);
+      setQuestaoAtual({
+        enunciado: '',
+        assunto: '',
+        dificuldade: 'Fácil',
+        alternativas: [
+          { letra: 'a', texto: '', correta: false },
+          { letra: 'b', texto: '', correta: false },
+          { letra: 'c', texto: '', correta: false },
+          { letra: 'd', texto: '', correta: false },
+          { letra: 'e', texto: '', correta: false }
+        ]
+      });
+      setIsModalCriarSimuladoOpen(false);
+      
+      // Recarregar os dados
+      carregarConteudo();
+      
+    } catch (error) {
+      console.error('Erro ao salvar simulado:', error);
+      alert('Ocorreu um erro ao salvar o simulado. Por favor, tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -881,8 +989,8 @@ export default function Simulados() {
                   value={novoSimulado.descricao}
                   onChange={(e) => setNovoSimulado({ ...novoSimulado, descricao: e.target.value })}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
-                  placeholder="Digite uma descrição para o simulado"
                   rows={2}
+                  placeholder="Digite uma descrição para o simulado"
                 />
               </div>
 
@@ -1278,6 +1386,41 @@ export default function Simulados() {
                 <option value="Dezembro">Dezembro</option>
               </select>
             </div>
+            
+            {/* Seleção de ano */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Ano do Simulado
+              </label>
+              <input
+                type="number"
+                value={novoSimuladoAno}
+                onChange={(e) => setNovoSimuladoAno(parseInt(e.target.value))}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                min={2020}
+                max={2100}
+                required
+              />
+            </div>
+            
+            {/* Seleção de pasta (opcional) */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Pasta (opcional)
+              </label>
+              <select
+                value={pastaIdSelecionada || ''}
+                onChange={(e) => setPastaIdSelecionada(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Selecione uma pasta (opcional)</option>
+                {pastas.map((pasta) => (
+                  <option key={pasta.id} value={pasta.id}>
+                    {pasta.titulo}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {novoSimuladoMes && (
               <>
@@ -1446,6 +1589,8 @@ export default function Simulados() {
                     onClick={() => {
                       // Limpar o formulário e fechar o modal
                       setNovoSimuladoMes('');
+                      setNovoSimuladoAno(new Date().getFullYear());
+                      setPastaIdSelecionada(null);
                       setQuestoes([]);
                       setQuestaoAtual({
                         enunciado: '',
@@ -1466,36 +1611,11 @@ export default function Simulados() {
                     Cancelar
                   </button>
                   <button
-                    onClick={() => {
-                      // Aqui seria implementada a lógica para salvar o simulado
-                      if (questoes.length === 0) {
-                        alert('Adicione pelo menos uma questão ao simulado.');
-                        return;
-                      }
-                      
-                      alert('Simulado criado com sucesso! (Implementação de salvamento pendente)');
-                      
-                      // Limpar o formulário e fechar o modal
-                      setNovoSimuladoMes('');
-                      setQuestoes([]);
-                      setQuestaoAtual({
-                        enunciado: '',
-                        assunto: '',
-                        dificuldade: 'Fácil',
-                        alternativas: [
-                          { letra: 'a', texto: '', correta: false },
-                          { letra: 'b', texto: '', correta: false },
-                          { letra: 'c', texto: '', correta: false },
-                          { letra: 'd', texto: '', correta: false },
-                          { letra: 'e', texto: '', correta: false }
-                        ]
-                      });
-                      setIsModalCriarSimuladoOpen(false);
-                    }}
+                    onClick={salvarSimulado}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
-                    disabled={questoes.length === 0}
+                    disabled={questoes.length === 0 || isLoading}
                   >
-                    Salvar Simulado
+                    {isLoading ? 'Salvando...' : 'Salvar Simulado'}
                   </button>
                 </div>
               </>
