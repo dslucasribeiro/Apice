@@ -687,6 +687,7 @@ export default function Simulados() {
             .from('alternativas')
             .insert({
               questao_id: questaoCriada.id,
+              "simuladoExistente_id": simuladoCriado.id,
               letra: alternativa.letra,
               texto: alternativa.texto,
               correta: alternativa.correta
@@ -776,20 +777,18 @@ export default function Simulados() {
 
         if (questaoError) throw questaoError;
 
-        // 2. Inserir as 5 alternativas (de 'a' a 'e')
-        const alternativas = ['a', 'b', 'c', 'd', 'e'].map(letra => ({
-          questao_id: questaoData.id,
-          "simuladoExistente_id": gabarito.simuladoId,
-          letra: letra,
-          texto: null, // Campo opcional
-          correta: letra === questao.alternativaCorreta
-        }));
-
-        const { error: alternativasError } = await supabase
+        // 2. Inserir apenas a alternativa correta
+        const { error: alternativaError } = await supabase
           .from('alternativas')
-          .insert(alternativas);
+          .insert({
+            questao_id: questaoData.id,
+            "simuladoExistente_id": gabarito.simuladoId,
+            letra: questao.alternativaCorreta,
+            texto: null, // Campo opcional
+            correta: true
+          });
 
-        if (alternativasError) throw alternativasError;
+        if (alternativaError) throw alternativaError;
       }
 
       alert('Gabarito salvo com sucesso!');
