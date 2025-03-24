@@ -131,6 +131,24 @@ export default function Simulados() {
   // Novo estado para o modal de escolha de tipo de simulado
   const [isModalEscolhaTipoOpen, setIsModalEscolhaTipoOpen] = useState(false);
 
+  // Estados para o modal de gabarito
+  const [isModalGabaritoOpen, setIsModalGabaritoOpen] = useState(false);
+  const [gabarito, setGabarito] = useState({
+    simuladoId: null as number | null,
+    questoes: [] as {
+      numero: number;
+      assunto: string;
+      dificuldade: string;
+      alternativaCorreta: string;
+    }[]
+  });
+  const [questaoGabaritoAtual, setQuestaoGabaritoAtual] = useState({
+    numero: 1,
+    assunto: '',
+    dificuldade: 'Fácil',
+    alternativaCorreta: 'a'
+  });
+  const [simuladosDisponiveis, setSimuladosDisponiveis] = useState<Simulado[]>([]);
   const alunosFiltrados = alunos.filter(aluno => 
     aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
   );
@@ -139,6 +157,7 @@ export default function Simulados() {
     fetchUserType();
     carregarConteudo();
     carregarAlunos();
+    carregarSimuladosDisponiveis();
   }, [pastaAtual]);
 
   const fetchUserType = async () => {
@@ -714,6 +733,22 @@ export default function Simulados() {
     }
   };
 
+  const carregarSimuladosDisponiveis = async () => {
+    const supabase = createSupabaseClient();
+    try {
+      const { data, error } = await supabase
+        .from('simulados')
+        .select('*')
+        .eq('ativo', true)
+        .order('titulo');
+      
+      if (error) throw error;
+      setSimuladosDisponiveis(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar simulados:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -957,9 +992,8 @@ export default function Simulados() {
               
               <button
                 onClick={() => {
-                  // Implementação futura para o botão Gabarito
                   setIsModalEscolhaTipoOpen(false);
-                  // Aqui iremos adicionar a lógica no futuro
+                  setIsModalGabaritoOpen(true);
                 }}
                 className="bg-green-600 hover:bg-green-700 text-white py-6 px-4 rounded-lg flex flex-col items-center justify-center transition-colors"
               >
@@ -1663,6 +1697,200 @@ export default function Simulados() {
                     disabled={questoes.length === 0 || isLoading}
                   >
                     {isLoading ? 'Salvando...' : 'Salvar Simulado'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Gabarito */}
+      {isModalGabaritoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4 my-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Criar Gabarito</h2>
+              <button onClick={() => setIsModalGabaritoOpen(false)} className="text-gray-400 hover:text-white">
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Seleção de simulado */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Selecione o Simulado
+              </label>
+              <select
+                value={gabarito.simuladoId || ''}
+                onChange={(e) => setGabarito({ ...gabarito, simuladoId: e.target.value ? parseInt(e.target.value) : null })}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                required
+              >
+                <option value="">Selecione um simulado</option>
+                {simuladosDisponiveis.map((simulado) => (
+                  <option key={simulado.id} value={simulado.id}>
+                    {simulado.titulo}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {gabarito.simuladoId && (
+              <>
+                {/* Lista de questões já adicionadas */}
+                {gabarito.questoes.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-medium text-white mb-3">Questões Adicionadas</h3>
+                    <div className="space-y-2">
+                      {gabarito.questoes.map((questao, index) => (
+                        <div key={index} className="bg-gray-800 p-3 rounded-lg">
+                          <div className="flex justify-between">
+                            <h4 className="font-medium text-white">Questão {questao.numero}</h4>
+                            <div className="text-sm text-gray-400">
+                              <span className="mr-3">Assunto: {questao.assunto}</span>
+                              <span>Dificuldade: {questao.dificuldade}</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-300 mt-1">{questao.numero} - {questao.alternativaCorreta}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulário para adicionar nova questão */}
+                <div className="bg-gray-800 p-4 rounded-lg mb-6">
+                  <h3 className="text-lg font-medium text-white mb-4">
+                    Questão {gabarito.questoes.length + 1}
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Número da Questão
+                      </label>
+                      <input
+                        type="number"
+                        value={questaoGabaritoAtual.numero}
+                        onChange={(e) => setQuestaoGabaritoAtual({ ...questaoGabaritoAtual, numero: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Assunto
+                      </label>
+                      <input
+                        type="text"
+                        value={questaoGabaritoAtual.assunto}
+                        onChange={(e) => setQuestaoGabaritoAtual({ ...questaoGabaritoAtual, assunto: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        placeholder="Ex: Matemática, Física, etc."
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Alternativa Correta
+                      </label>
+                      <select
+                        value={questaoGabaritoAtual.alternativaCorreta}
+                        onChange={(e) => setQuestaoGabaritoAtual({ ...questaoGabaritoAtual, alternativaCorreta: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                      >
+                        <option value="a">A</option>
+                        <option value="b">B</option>
+                        <option value="c">C</option>
+                        <option value="d">D</option>
+                        <option value="e">E</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Nível de Dificuldade
+                      </label>
+                      <select
+                        value={questaoGabaritoAtual.dificuldade}
+                        onChange={(e) => setQuestaoGabaritoAtual({ ...questaoGabaritoAtual, dificuldade: e.target.value })}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                      >
+                        <option value="Fácil">Fácil</option>
+                        <option value="Médio">Médio</option>
+                        <option value="Difícil">Difícil</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={() => {
+                        // Validar se todos os campos obrigatórios estão preenchidos
+                        if (!questaoGabaritoAtual.numero || !questaoGabaritoAtual.assunto) {
+                          alert('Preencha todos os campos obrigatórios.');
+                          return;
+                        }
+                        
+                        // Adicionar a questão à lista
+                        setGabarito({
+                          ...gabarito,
+                          questoes: [
+                            ...gabarito.questoes,
+                            {
+                              numero: questaoGabaritoAtual.numero,
+                              assunto: questaoGabaritoAtual.assunto,
+                              alternativaCorreta: questaoGabaritoAtual.alternativaCorreta,
+                              dificuldade: questaoGabaritoAtual.dificuldade
+                            }
+                          ]
+                        });
+                        
+                        // Limpar o formulário para a próxima questão
+                        setQuestaoGabaritoAtual({
+                          numero: gabarito.questoes.length + 2,
+                          assunto: '',
+                          dificuldade: 'Fácil',
+                          alternativaCorreta: 'a'
+                        });
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                    >
+                      Adicionar Questão
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Botões de ação */}
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => {
+                      // Limpar o formulário e fechar o modal
+                      setGabarito({
+                        simuladoId: null,
+                        questoes: []
+                      });
+                      setIsModalGabaritoOpen(false);
+                    }}
+                    className="px-4 py-2 text-gray-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Implementação futura para salvar o gabarito
+                      alert('Gabarito salvo com sucesso!');
+                      setGabarito({
+                        simuladoId: null,
+                        questoes: []
+                      });
+                      setIsModalGabaritoOpen(false);
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                  >
+                    Salvar Gabarito
                   </button>
                 </div>
               </>
