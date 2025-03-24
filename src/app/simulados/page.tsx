@@ -62,6 +62,7 @@ export default function Simulados() {
   const [isModalSimuladoOpen, setIsModalSimuladoOpen] = useState(false);
   const [isModalResolucaoOpen, setIsModalResolucaoOpen] = useState(false);
   const [isModalPdfOpen, setIsModalPdfOpen] = useState(false);
+  const [isModalCriarSimuladoOpen, setIsModalCriarSimuladoOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [permiteDownload, setPermiteDownload] = useState(false);
   const [simuladoSelecionado, setSimuladoSelecionado] = useState<Simulado | null>(null);
@@ -97,6 +98,32 @@ export default function Simulados() {
   const [resultadosAluno, setResultadosAluno] = useState<ResultadoSimulado[]>([]);
   const [mesSelecionado, setMesSelecionado] = useState('');
   const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([]);
+  
+  // Estados para criação de simulado com questões
+  const [novoSimuladoMes, setNovoSimuladoMes] = useState('');
+  const [questoes, setQuestoes] = useState<{
+    numero: number;
+    enunciado: string;
+    assunto: string;
+    dificuldade: string;
+    alternativas: {
+      letra: string;
+      texto: string;
+      correta: boolean;
+    }[];
+  }[]>([]);
+  const [questaoAtual, setQuestaoAtual] = useState({
+    enunciado: '',
+    assunto: '',
+    dificuldade: 'Fácil',
+    alternativas: [
+      { letra: 'a', texto: '', correta: false },
+      { letra: 'b', texto: '', correta: false },
+      { letra: 'c', texto: '', correta: false },
+      { letra: 'd', texto: '', correta: false },
+      { letra: 'e', texto: '', correta: false }
+    ]
+  });
 
   const alunosFiltrados = alunos.filter(aluno => 
     aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
@@ -619,6 +646,12 @@ export default function Simulados() {
               >
                 Nova Pasta
               </button>
+              <button
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                onClick={() => setIsModalCriarSimuladoOpen(true)}
+              >
+                Criar simulado
+              </button>
               {pastaAtual !== null && (
                 <button
                   onClick={() => setIsModalSimuladoOpen(true)}
@@ -822,7 +855,7 @@ export default function Simulados() {
 
       {/* Modal de Novo Simulado */}
       {isModalSimuladoOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 p-4 rounded-lg w-full max-w-lg mx-4">
             <h2 className="text-xl font-semibold text-white mb-3">Adicionar Novo Simulado</h2>
             
@@ -1149,7 +1182,7 @@ export default function Simulados() {
                 onClick={() => setIsModalVerResultadoOpen(false)}
                 className="text-gray-400 hover:text-gray-300"
               >
-                <XMarkIcon className="h-6 w-6" />
+                <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
 
@@ -1204,6 +1237,269 @@ export default function Simulados() {
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Criar Simulado com Questões */}
+      {isModalCriarSimuladoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4 my-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Criar Novo Simulado</h2>
+              <button onClick={() => setIsModalCriarSimuladoOpen(false)} className="text-gray-400 hover:text-white">
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Seleção de mês */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Mês do Simulado
+              </label>
+              <select
+                value={novoSimuladoMes}
+                onChange={(e) => setNovoSimuladoMes(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                required
+              >
+                <option value="">Selecione o mês</option>
+                <option value="Janeiro">Janeiro</option>
+                <option value="Fevereiro">Fevereiro</option>
+                <option value="Março">Março</option>
+                <option value="Abril">Abril</option>
+                <option value="Maio">Maio</option>
+                <option value="Junho">Junho</option>
+                <option value="Julho">Julho</option>
+                <option value="Agosto">Agosto</option>
+                <option value="Setembro">Setembro</option>
+                <option value="Outubro">Outubro</option>
+                <option value="Novembro">Novembro</option>
+                <option value="Dezembro">Dezembro</option>
+              </select>
+            </div>
+
+            {novoSimuladoMes && (
+              <>
+                {/* Lista de questões já adicionadas */}
+                {questoes.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-medium text-white mb-3">Questões Adicionadas</h3>
+                    <div className="space-y-2">
+                      {questoes.map((questao, index) => (
+                        <div key={index} className="bg-gray-800 p-3 rounded-lg">
+                          <div className="flex justify-between">
+                            <h4 className="font-medium text-white">Questão {questao.numero}</h4>
+                            <div className="text-sm text-gray-400">
+                              <span className="mr-3">Assunto: {questao.assunto}</span>
+                              <span>Dificuldade: {questao.dificuldade}</span>
+                            </div>
+                          </div>
+                          <p className="text-gray-300 mt-1">{questao.enunciado.substring(0, 100)}...</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulário para adicionar nova questão */}
+                <div className="bg-gray-800 p-4 rounded-lg mb-6">
+                  <h3 className="text-lg font-medium text-white mb-4">
+                    Questão {questoes.length + 1}
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Enunciado da Questão
+                      </label>
+                      <textarea
+                        value={questaoAtual.enunciado}
+                        onChange={(e) => setQuestaoAtual({...questaoAtual, enunciado: e.target.value})}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        rows={4}
+                        placeholder="Digite o enunciado da questão..."
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Assunto
+                        </label>
+                        <input
+                          type="text"
+                          value={questaoAtual.assunto}
+                          onChange={(e) => setQuestaoAtual({...questaoAtual, assunto: e.target.value})}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                          placeholder="Ex: Matemática, Física, etc."
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Nível de Dificuldade
+                        </label>
+                        <select
+                          value={questaoAtual.dificuldade}
+                          onChange={(e) => setQuestaoAtual({...questaoAtual, dificuldade: e.target.value})}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                        >
+                          <option value="Fácil">Fácil</option>
+                          <option value="Médio">Médio</option>
+                          <option value="Difícil">Difícil</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-3">
+                        Alternativas
+                      </label>
+                      <div className="space-y-3">
+                        {questaoAtual.alternativas.map((alternativa, index) => (
+                          <div key={index} className="flex items-start space-x-3">
+                            <div className="flex items-center mt-2">
+                              <span className="text-gray-300 font-medium w-6">{alternativa.letra})</span>
+                              <input
+                                type="radio"
+                                name="alternativa-correta"
+                                checked={alternativa.correta}
+                                onChange={() => {
+                                  const novasAlternativas = questaoAtual.alternativas.map((alt, i) => ({
+                                    ...alt,
+                                    correta: i === index
+                                  }));
+                                  setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
+                                }}
+                                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                              />
+                            </div>
+                            <textarea
+                              value={alternativa.texto}
+                              onChange={(e) => {
+                                const novasAlternativas = [...questaoAtual.alternativas];
+                                novasAlternativas[index].texto = e.target.value;
+                                setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
+                              }}
+                              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                              rows={2}
+                              placeholder={`Digite o texto da alternativa ${alternativa.letra}...`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={() => {
+                        // Validar se pelo menos uma alternativa está marcada como correta
+                        if (!questaoAtual.alternativas.some(alt => alt.correta)) {
+                          alert('Selecione uma alternativa correta.');
+                          return;
+                        }
+                        
+                        // Validar se todos os campos obrigatórios estão preenchidos
+                        if (!questaoAtual.enunciado || !questaoAtual.assunto) {
+                          alert('Preencha todos os campos obrigatórios.');
+                          return;
+                        }
+                        
+                        // Adicionar a questão à lista
+                        setQuestoes([
+                          ...questoes,
+                          {
+                            numero: questoes.length + 1,
+                            enunciado: questaoAtual.enunciado,
+                            assunto: questaoAtual.assunto,
+                            dificuldade: questaoAtual.dificuldade,
+                            alternativas: questaoAtual.alternativas
+                          }
+                        ]);
+                        
+                        // Limpar o formulário para a próxima questão
+                        setQuestaoAtual({
+                          enunciado: '',
+                          assunto: '',
+                          dificuldade: 'Fácil',
+                          alternativas: [
+                            { letra: 'a', texto: '', correta: false },
+                            { letra: 'b', texto: '', correta: false },
+                            { letra: 'c', texto: '', correta: false },
+                            { letra: 'd', texto: '', correta: false },
+                            { letra: 'e', texto: '', correta: false }
+                          ]
+                        });
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                    >
+                      Adicionar Questão
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Botões de ação */}
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => {
+                      // Limpar o formulário e fechar o modal
+                      setNovoSimuladoMes('');
+                      setQuestoes([]);
+                      setQuestaoAtual({
+                        enunciado: '',
+                        assunto: '',
+                        dificuldade: 'Fácil',
+                        alternativas: [
+                          { letra: 'a', texto: '', correta: false },
+                          { letra: 'b', texto: '', correta: false },
+                          { letra: 'c', texto: '', correta: false },
+                          { letra: 'd', texto: '', correta: false },
+                          { letra: 'e', texto: '', correta: false }
+                        ]
+                      });
+                      setIsModalCriarSimuladoOpen(false);
+                    }}
+                    className="px-4 py-2 text-gray-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Aqui seria implementada a lógica para salvar o simulado
+                      if (questoes.length === 0) {
+                        alert('Adicione pelo menos uma questão ao simulado.');
+                        return;
+                      }
+                      
+                      alert('Simulado criado com sucesso! (Implementação de salvamento pendente)');
+                      
+                      // Limpar o formulário e fechar o modal
+                      setNovoSimuladoMes('');
+                      setQuestoes([]);
+                      setQuestaoAtual({
+                        enunciado: '',
+                        assunto: '',
+                        dificuldade: 'Fácil',
+                        alternativas: [
+                          { letra: 'a', texto: '', correta: false },
+                          { letra: 'b', texto: '', correta: false },
+                          { letra: 'c', texto: '', correta: false },
+                          { letra: 'd', texto: '', correta: false },
+                          { letra: 'e', texto: '', correta: false }
+                        ]
+                      });
+                      setIsModalCriarSimuladoOpen(false);
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                    disabled={questoes.length === 0}
+                  >
+                    Salvar Simulado
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
