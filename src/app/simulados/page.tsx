@@ -128,6 +128,9 @@ export default function Simulados() {
     ]
   });
 
+  // Novo estado para o modal de escolha de tipo de simulado
+  const [isModalEscolhaTipoOpen, setIsModalEscolhaTipoOpen] = useState(false);
+
   const alunosFiltrados = alunos.filter(aluno => 
     aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
   );
@@ -756,7 +759,7 @@ export default function Simulados() {
               </button>
               <button
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
-                onClick={() => setIsModalCriarSimuladoOpen(true)}
+                onClick={() => setIsModalEscolhaTipoOpen(true)}
               >
                 Criar simulado
               </button>
@@ -924,6 +927,50 @@ export default function Simulados() {
           </div>
         )}
       </main>
+
+      {/* Modal de Escolha de Tipo de Simulado */}
+      {isModalEscolhaTipoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Escolha o tipo de simulado</h2>
+              <button 
+                onClick={() => setIsModalEscolhaTipoOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <button
+                onClick={() => {
+                  setIsModalEscolhaTipoOpen(false);
+                  setIsModalCriarSimuladoOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white py-6 px-4 rounded-lg flex flex-col items-center justify-center transition-colors"
+              >
+                <DocumentIcon className="h-10 w-10 mb-2" />
+                <span className="text-lg font-medium">Interno</span>
+                <p className="text-xs text-gray-300 mt-1 text-center">Crie um simulado com questões</p>
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Implementação futura para o botão Gabarito
+                  setIsModalEscolhaTipoOpen(false);
+                  // Aqui iremos adicionar a lógica no futuro
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white py-6 px-4 rounded-lg flex flex-col items-center justify-center transition-colors"
+              >
+                <DocumentCheckIcon className="h-10 w-10 mb-2" />
+                <span className="text-lg font-medium">Gabarito</span>
+                <p className="text-xs text-gray-300 mt-1 text-center">Adicione apenas um gabarito</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Nova Pasta */}
       {isModalPastaOpen && (
