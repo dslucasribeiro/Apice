@@ -153,6 +153,12 @@ export default function Simulados() {
     aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
   );
 
+  // Estados para gerenciar o cartão resposta
+  const [isModalCartaoRespostaOpen, setIsModalCartaoRespostaOpen] = useState(false);
+  const [simuladoRespostaId, setSimuladoRespostaId] = useState<number | null>(null);
+  const [questoesSimulado, setQuestoesSimulado] = useState<{numero: number, id: string}[]>([]);
+  const [respostasAluno, setRespostasAluno] = useState<{[key: number]: string}>({});
+
   useEffect(() => {
     fetchUserType();
     carregarConteudo();
@@ -807,6 +813,133 @@ export default function Simulados() {
     }
   };
 
+  const abrirCartaoResposta = (simulado: Simulado) => {
+    setIsModalCartaoRespostaOpen(true);
+    // Se o simulado já tiver sido passado, usamos o ID dele
+    if (simulado && simulado.id) {
+      setSimuladoRespostaId(simulado.id);
+      carregarQuestoesSimulado(simulado.id);
+    } else {
+      // Caso contrário, resetamos o estado
+      setSimuladoRespostaId(null);
+      setQuestoesSimulado([]);
+      setRespostasAluno({});
+    }
+  };
+
+  const carregarQuestoesSimulado = async (simuladoId: number) => {
+    try {
+      const supabase = createSupabaseClient();
+      const { data, error } = await supabase
+        .from('questoes')
+        .select('id, numero')
+        .eq('simuladoExistente_id', simuladoId)
+        .order('numero', { ascending: true });
+      
+      if (error) {
+        console.error('Erro ao carregar questões:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setQuestoesSimulado(data);
+        // Inicializa o objeto de respostas com valores vazios
+        const respostasIniciais: {[key: number]: string} = {};
+        data.forEach(questao => {
+          respostasIniciais[questao.numero] = '';
+        });
+        setRespostasAluno(respostasIniciais);
+      } else {
+        setQuestoesSimulado([]);
+        setRespostasAluno({});
+      }
+    } catch (error) {
+      console.error('Erro ao carregar questões:', error);
+    }
+  };
+
+  const handleSimuladoRespostaChange = (simuladoId: number) => {
+    setSimuladoRespostaId(simuladoId);
+    carregarQuestoesSimulado(simuladoId);
+  };
+
+  const handleRespostaChange = (numeroQuestao: number, alternativa: string) => {
+    setRespostasAluno(prev => ({
+      ...prev,
+      [numeroQuestao]: alternativa
+    }));
+  };
+
+  const salvarRespostasAluno = async () => {
+    // Verificar se todas as questões foram respondidas
+    const todasRespondidas = Object.values(respostasAluno).every(resposta => resposta !== '');
+    
+    if (!todasRespondidas) {
+      alert('Por favor, responda todas as questões antes de salvar.');
+      return;
+    }
+
+    try {
+      const supabase = createSupabaseClient();
+      
+      // Obter o ID do aluno atual (do usuário logado)
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        alert('Usuário não autenticado. Por favor, faça login novamente.');
+        return;
+      }
+      
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!userData) {
+        alert('Não foi possível encontrar suas informações. Por favor, contate o suporte.');
+        return;
+      }
+      
+      const alunoId = userData.id;
+      
+      // Salvar as respostas para cada questão
+      for (const numeroQuestao in respostasAluno) {
+        if (respostasAluno.hasOwnProperty(numeroQuestao)) {
+          const questao = questoesSimulado.find(q => q.numero === parseInt(numeroQuestao));
+          
+          if (questao) {
+            const { error } = await supabase
+              .from('respostas_aluno')
+              .insert({
+                aluno_id: alunoId,
+                questao_id: questao.id,
+                simulado_id: simuladoRespostaId,
+                alternativa_selecionada: respostasAluno[parseInt(numeroQuestao)],
+                data_resposta: new Date().toISOString()
+              });
+              
+            if (error) {
+              console.error('Erro ao salvar resposta:', error);
+              alert('Ocorreu um erro ao salvar suas respostas. Por favor, tente novamente.');
+              return;
+            }
+          }
+        }
+      }
+      
+      alert('Respostas salvas com sucesso!');
+      setIsModalCartaoRespostaOpen(false);
+      setSimuladoRespostaId(null);
+      setQuestoesSimulado([]);
+      setRespostasAluno({});
+      
+    } catch (error) {
+      console.error('Erro ao salvar respostas:', error);
+      alert('Ocorreu um erro ao salvar suas respostas. Por favor, tente novamente.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navigation />
@@ -998,7 +1131,7 @@ export default function Simulados() {
                     
                     <button
                       className="flex items-center space-x-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 rounded-md text-sm"
-                      onClick={() => abrirPdf(simulado.pdf_questoes, simulado.download_permitido)}
+                      onClick={() => abrirCartaoResposta(simulado)}
                     >
                       <DocumentIcon className="h-4 w-4" />
                       <span>Cartão resposta</span>
@@ -1956,6 +2089,144 @@ export default function Simulados() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Cartão Resposta */}
+      {isModalCartaoRespostaOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4 my-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Cartão Resposta</h2>
+              <button onClick={() => setIsModalCartaoRespostaOpen(false)} className="text-gray-400 hover:text-white">
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Seleção de simulado quando nenhum foi passado diretamente */}
+            {!simuladoRespostaId && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Selecione o Simulado
+                </label>
+                <select
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  onChange={(e) => handleSimuladoRespostaChange(parseInt(e.target.value))}
+                  value={simuladoRespostaId || ""}
+                >
+                  <option value="">Selecione um simulado</option>
+                  {simuladosDisponiveis.map((simulado) => (
+                    <option key={simulado.id} value={simulado.id}>
+                      {simulado.titulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {/* Se um simulado foi selecionado, mostra as questões */}
+            {simuladoRespostaId && (
+              <div className="space-y-4">
+                {questoesSimulado.length > 0 ? (
+                  <div className="space-y-4">
+                    {questoesSimulado.map((questao, index) => (
+                      <div key={index} className="bg-gray-800 p-4 rounded-lg">
+                        <h3 className="text-lg font-medium text-white mb-2">Questão {questao.numero}</h3>
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-300 font-medium">A)</span>
+                            <input
+                              type="radio"
+                              name={`questao-${questao.numero}`}
+                              value="A"
+                              checked={respostasAluno[questao.numero] === 'A'}
+                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-300 font-medium">B)</span>
+                            <input
+                              type="radio"
+                              name={`questao-${questao.numero}`}
+                              value="B"
+                              checked={respostasAluno[questao.numero] === 'B'}
+                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-300 font-medium">C)</span>
+                            <input
+                              type="radio"
+                              name={`questao-${questao.numero}`}
+                              value="C"
+                              checked={respostasAluno[questao.numero] === 'C'}
+                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-300 font-medium">D)</span>
+                            <input
+                              type="radio"
+                              name={`questao-${questao.numero}`}
+                              value="D"
+                              checked={respostasAluno[questao.numero] === 'D'}
+                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-300 font-medium">E)</span>
+                            <input
+                              type="radio"
+                              name={`questao-${questao.numero}`}
+                              value="E"
+                              checked={respostasAluno[questao.numero] === 'E'}
+                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-gray-800 p-6 rounded-lg text-center">
+                    <p className="text-lg text-gray-300">
+                      Não foram encontradas questões para este simulado.
+                    </p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      Por favor, entre em contato com o administrador.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Botões de ação */}
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  // Limpar o formulário e fechar o modal
+                  setSimuladoRespostaId(null);
+                  setQuestoesSimulado([]);
+                  setRespostasAluno({});
+                  setIsModalCartaoRespostaOpen(false);
+                }}
+                className="px-4 py-2 text-gray-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarRespostasAluno}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+              >
+                Salvar Respostas
+              </button>
+            </div>
           </div>
         </div>
       )}
