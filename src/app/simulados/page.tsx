@@ -987,29 +987,37 @@ export default function Simulados() {
                     </div>
                   )}
                   
-                  <div className="flex space-x-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => abrirPdf(simulado.pdf_questoes, simulado.download_permitido)}
-                      className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md text-sm"
+                      className="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 rounded-md text-sm"
                     >
-                      <DocumentIcon className="h-5 w-5" />
+                      <DocumentIcon className="h-4 w-4" />
                       <span>Questões</span>
                     </button>
                     
                     <button
-                      onClick={() => abrirPdf(simulado.pdf_gabarito, simulado.download_permitido)}
-                      className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md text-sm"
+                      className="flex items-center space-x-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 rounded-md text-sm"
+                      onClick={() => abrirPdf(simulado.pdf_questoes, simulado.download_permitido)}
                     >
-                      <DocumentCheckIcon className="h-5 w-5" />
+                      <DocumentIcon className="h-4 w-4" />
+                      <span>Cartão resposta</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => abrirPdf(simulado.pdf_gabarito, simulado.download_permitido)}
+                      className="flex items-center space-x-1 bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded-md text-sm"
+                    >
+                      <DocumentCheckIcon className="h-4 w-4" />
                       <span>Gabarito</span>
                     </button>
                     
                     {simulado.video_resolucao && (
                       <button
                         onClick={() => abrirResolucao(simulado)}
-                        className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-md text-sm"
+                        className="flex items-center space-x-1 bg-purple-600 hover:bg-purple-700 text-white px-2 py-1.5 rounded-md text-sm"
                       >
-                        <PlayCircleIcon className="h-5 w-5" />
+                        <PlayCircleIcon className="h-4 w-4" />
                         <span>Resolução</span>
                       </button>
                     )}
