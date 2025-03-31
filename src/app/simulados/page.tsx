@@ -159,6 +159,14 @@ export default function Simulados() {
   const [questoesSimulado, setQuestoesSimulado] = useState<{numero: number, id: string}[]>([]);
   const [respostasAluno, setRespostasAluno] = useState<{[key: number]: string}>({});
 
+  // Adicionando estado para mostrar resultado do simulado
+  const [resultadoSimulado, setResultadoSimulado] = useState<{
+    acertos: number,
+    total: number,
+    percentual: number,
+    mostrando: boolean
+  }>({ acertos: 0, total: 0, percentual: 0, mostrando: false });
+
   useEffect(() => {
     fetchUserType();
     carregarConteudo();
@@ -903,36 +911,64 @@ export default function Simulados() {
       
       const alunoId = userData.id;
       
+      // Contadores para o resultado
+      let totalQuestoes = Object.keys(respostasAluno).length;
+      let acertos = 0;
+      
       // Salvar as respostas para cada questão
       for (const numeroQuestao in respostasAluno) {
         if (respostasAluno.hasOwnProperty(numeroQuestao)) {
           const questao = questoesSimulado.find(q => q.numero === parseInt(numeroQuestao));
+          const alternativaResposta = respostasAluno[parseInt(numeroQuestao)];
           
           if (questao) {
-            const { error } = await supabase
-              .from('respostas_aluno')
+            // Salvar a resposta do aluno
+            const { error: respostaError } = await supabase
+              .from('respostas_alunos')
               .insert({
                 aluno_id: alunoId,
                 questao_id: questao.id,
-                simulado_id: simuladoRespostaId,
-                alternativa_selecionada: respostasAluno[parseInt(numeroQuestao)],
-                data_resposta: new Date().toISOString()
+                alternativa_id: null, // Não nos preocupamos com este campo agora
+                alternativa_resposta: alternativaResposta
               });
               
-            if (error) {
-              console.error('Erro ao salvar resposta:', error);
+            if (respostaError) {
+              console.error('Erro ao salvar resposta:', respostaError);
               alert('Ocorreu um erro ao salvar suas respostas. Por favor, tente novamente.');
               return;
+            }
+            
+            // Verificar se a resposta está correta
+            const { data: alternativaCorreta, error: alternativaError } = await supabase
+              .from('alternativas')
+              .select('letra')
+              .eq('questao_id', questao.id)
+              .eq('correta', true)
+              .eq('simuladoExistente_id', simuladoRespostaId)
+              .single();
+            
+            if (!alternativaError && alternativaCorreta) {
+              // Comparar a resposta do aluno com a alternativa correta (ambas em minúsculo)
+              if (alternativaCorreta.letra.toLowerCase() === alternativaResposta.toLowerCase()) {
+                acertos++;
+              }
+            } else {
+              console.error('Erro ao buscar alternativa correta:', alternativaError);
             }
           }
         }
       }
       
-      alert('Respostas salvas com sucesso!');
-      setIsModalCartaoRespostaOpen(false);
-      setSimuladoRespostaId(null);
-      setQuestoesSimulado([]);
-      setRespostasAluno({});
+      // Calcular o percentual de acertos
+      const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
+      
+      // Atualizar o estado de resultado
+      setResultadoSimulado({
+        acertos,
+        total: totalQuestoes,
+        percentual,
+        mostrando: true
+      });
       
     } catch (error) {
       console.error('Erro ao salvar respostas:', error);
@@ -1134,7 +1170,7 @@ export default function Simulados() {
                       onClick={() => abrirCartaoResposta(simulado)}
                     >
                       <DocumentIcon className="h-4 w-4" />
-                      <span>Cartão resposta</span>
+                      <span>Responder simulado</span>
                     </button>
                     
                     <button
@@ -1151,7 +1187,7 @@ export default function Simulados() {
                         className="flex items-center space-x-1 bg-purple-600 hover:bg-purple-700 text-white px-2 py-1.5 rounded-md text-sm"
                       >
                         <PlayCircleIcon className="h-4 w-4" />
-                        <span>Resolução</span>
+                        <span>Resolução em vídeo</span>
                       </button>
                     )}
                   </div>
@@ -1282,7 +1318,7 @@ export default function Simulados() {
                   <div className="flex items-center justify-center w-full">
                     <label className="flex flex-col w-full h-16 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700 transition-all">
                       <div className="flex items-center justify-center h-full space-x-2">
-                        <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 002 2V5a2 2 0 00-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <p className="text-sm text-gray-400">
@@ -1309,7 +1345,7 @@ export default function Simulados() {
                   <div className="flex items-center justify-center w-full">
                     <label className="flex flex-col w-full h-16 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700 transition-all">
                       <div className="flex items-center justify-center h-full space-x-2">
-                        <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 002 2V5a2 2 0 00-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <p className="text-sm text-gray-400">
@@ -1795,7 +1831,7 @@ export default function Simulados() {
                                   }));
                                   setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
                                 }}
-                                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
+                                className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
                               />
                             </div>
                             <textarea
@@ -2098,135 +2134,191 @@ export default function Simulados() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4 my-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-white">Cartão Resposta</h2>
-              <button onClick={() => setIsModalCartaoRespostaOpen(false)} className="text-gray-400 hover:text-white">
+              <h2 className="text-xl font-semibold text-white">
+                {resultadoSimulado.mostrando ? "Resultado do Simulado" : "Responder Simulado"}
+              </h2>
+              <button onClick={() => {
+                setIsModalCartaoRespostaOpen(false);
+                setResultadoSimulado({ acertos: 0, total: 0, percentual: 0, mostrando: false });
+                setSimuladoRespostaId(null);
+                setQuestoesSimulado([]);
+                setRespostasAluno({});
+              }} className="text-gray-400 hover:text-white">
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
 
-            {/* Seleção de simulado quando nenhum foi passado diretamente */}
-            {!simuladoRespostaId && (
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Selecione o Simulado
-                </label>
-                <select
-                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  onChange={(e) => handleSimuladoRespostaChange(parseInt(e.target.value))}
-                  value={simuladoRespostaId || ""}
-                >
-                  <option value="">Selecione um simulado</option>
-                  {simuladosDisponiveis.map((simulado) => (
-                    <option key={simulado.id} value={simulado.id}>
-                      {simulado.titulo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            
-            {/* Se um simulado foi selecionado, mostra as questões */}
-            {simuladoRespostaId && (
-              <div className="space-y-4">
-                {questoesSimulado.length > 0 ? (
-                  <div className="space-y-4">
-                    {questoesSimulado.map((questao, index) => (
-                      <div key={index} className="bg-gray-800 p-4 rounded-lg">
-                        <h3 className="text-lg font-medium text-white mb-2">Questão {questao.numero}</h3>
-                        <div className="flex flex-col space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-300 font-medium">A)</span>
-                            <input
-                              type="radio"
-                              name={`questao-${questao.numero}`}
-                              value="A"
-                              checked={respostasAluno[questao.numero] === 'A'}
-                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
-                            />
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-300 font-medium">B)</span>
-                            <input
-                              type="radio"
-                              name={`questao-${questao.numero}`}
-                              value="B"
-                              checked={respostasAluno[questao.numero] === 'B'}
-                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
-                            />
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-300 font-medium">C)</span>
-                            <input
-                              type="radio"
-                              name={`questao-${questao.numero}`}
-                              value="C"
-                              checked={respostasAluno[questao.numero] === 'C'}
-                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
-                            />
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-300 font-medium">D)</span>
-                            <input
-                              type="radio"
-                              name={`questao-${questao.numero}`}
-                              value="D"
-                              checked={respostasAluno[questao.numero] === 'D'}
-                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
-                            />
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-300 font-medium">E)</span>
-                            <input
-                              type="radio"
-                              name={`questao-${questao.numero}`}
-                              value="E"
-                              checked={respostasAluno[questao.numero] === 'E'}
-                              onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+            {/* Resultado do simulado */}
+            {resultadoSimulado.mostrando ? (
+              <div className="text-center">
+                <div className="bg-gray-800 p-8 rounded-lg mb-6">
+                  <h3 className="text-2xl font-bold text-white mb-4">Seu Resultado</h3>
+                  
+                  <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-blue-500 mb-6">
+                    <span className="text-3xl font-bold text-white">{resultadoSimulado.percentual}%</span>
                   </div>
-                ) : (
-                  <div className="bg-gray-800 p-6 rounded-lg text-center">
-                    <p className="text-lg text-gray-300">
-                      Não foram encontradas questões para este simulado.
-                    </p>
-                    <p className="text-sm text-gray-400 mt-2">
-                      Por favor, entre em contato com o administrador.
-                    </p>
+                  
+                  <p className="text-xl text-white mb-2">
+                    Você acertou <span className="font-bold text-green-400">{resultadoSimulado.acertos}</span> de <span className="font-bold">{resultadoSimulado.total}</span> questões
+                  </p>
+                  
+                  <div className="mt-6">
+                    {resultadoSimulado.percentual >= 70 ? (
+                      <div className="text-green-400 text-lg">
+                        <span className="font-bold">Parabéns!</span> Você teve um ótimo desempenho.
+                      </div>
+                    ) : resultadoSimulado.percentual >= 50 ? (
+                      <div className="text-yellow-400 text-lg">
+                        <span className="font-bold">Bom trabalho!</span> Continue praticando para melhorar.
+                      </div>
+                    ) : (
+                      <div className="text-red-400 text-lg">
+                        <span className="font-bold">Continue estudando!</span> Você pode melhorar na próxima tentativa.
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    setIsModalCartaoRespostaOpen(false);
+                    setResultadoSimulado({ acertos: 0, total: 0, percentual: 0, mostrando: false });
+                    setSimuladoRespostaId(null);
+                    setQuestoesSimulado([]);
+                    setRespostasAluno({});
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md text-lg font-medium"
+                >
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Seleção de simulado quando nenhum foi passado diretamente */}
+                {!simuladoRespostaId && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Selecione o Simulado
+                    </label>
+                    <select
+                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      onChange={(e) => handleSimuladoRespostaChange(parseInt(e.target.value))}
+                      value={simuladoRespostaId || ""}
+                    >
+                      <option value="">Selecione um simulado</option>
+                      {simuladosDisponiveis.map((simulado) => (
+                        <option key={simulado.id} value={simulado.id}>
+                          {simulado.titulo}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
-              </div>
+                
+                {/* Se um simulado foi selecionado, mostra as questões */}
+                {simuladoRespostaId && (
+                  <div className="space-y-4">
+                    {questoesSimulado.length > 0 ? (
+                      <div className="space-y-4">
+                        {questoesSimulado.map((questao, index) => (
+                          <div key={index} className="bg-gray-800 p-4 rounded-lg">
+                            <h3 className="text-lg font-medium text-white mb-2">Questão {questao.numero}</h3>
+                            <div className="flex flex-col space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-300 font-medium">A)</span>
+                                <input
+                                  type="radio"
+                                  name={`questao-${questao.numero}`}
+                                  value="A"
+                                  checked={respostasAluno[questao.numero] === 'A'}
+                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
+                                />
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-300 font-medium">B)</span>
+                                <input
+                                  type="radio"
+                                  name={`questao-${questao.numero}`}
+                                  value="B"
+                                  checked={respostasAluno[questao.numero] === 'B'}
+                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
+                                />
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-300 font-medium">C)</span>
+                                <input
+                                  type="radio"
+                                  name={`questao-${questao.numero}`}
+                                  value="C"
+                                  checked={respostasAluno[questao.numero] === 'C'}
+                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
+                                />
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-300 font-medium">D)</span>
+                                <input
+                                  type="radio"
+                                  name={`questao-${questao.numero}`}
+                                  value="D"
+                                  checked={respostasAluno[questao.numero] === 'D'}
+                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
+                                />
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-300 font-medium">E)</span>
+                                <input
+                                  type="radio"
+                                  name={`questao-${questao.numero}`}
+                                  value="E"
+                                  checked={respostasAluno[questao.numero] === 'E'}
+                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
+                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-gray-800 p-6 rounded-lg text-center">
+                        <p className="text-lg text-gray-300">
+                          Não foram encontradas questões para este simulado.
+                        </p>
+                        <p className="text-sm text-gray-400 mt-2">
+                          Por favor, entre em contato com o administrador.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Botões de ação */}
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    onClick={() => {
+                      // Limpar o formulário e fechar o modal
+                      setSimuladoRespostaId(null);
+                      setQuestoesSimulado([]);
+                      setRespostasAluno({});
+                      setIsModalCartaoRespostaOpen(false);
+                    }}
+                    className="px-4 py-2 text-gray-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={salvarRespostasAluno}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                  >
+                    Salvar Respostas
+                  </button>
+                </div>
+              </>
             )}
-            
-            {/* Botões de ação */}
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  // Limpar o formulário e fechar o modal
-                  setSimuladoRespostaId(null);
-                  setQuestoesSimulado([]);
-                  setRespostasAluno({});
-                  setIsModalCartaoRespostaOpen(false);
-                }}
-                className="px-4 py-2 text-gray-400 hover:text-white"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={salvarRespostasAluno}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
-              >
-                Salvar Respostas
-              </button>
-            </div>
           </div>
         </div>
       )}
