@@ -167,11 +167,15 @@ export default function Simulados() {
     mostrando: boolean
   }>({ acertos: 0, total: 0, percentual: 0, mostrando: false });
 
+  // Adicionando estado para controlar quais simulados o aluno já respondeu
+  const [simuladosRespondidos, setSimuladosRespondidos] = useState<number[]>([]);
+
   useEffect(() => {
     fetchUserType();
     carregarConteudo();
     carregarAlunos();
     carregarSimuladosDisponiveis();
+    carregarSimuladosRespondidos();
   }, [pastaAtual]);
 
   const fetchUserType = async () => {
@@ -605,6 +609,7 @@ export default function Simulados() {
     
     // Pegar o user_id do aluno logado
     const { data: { user } } = await supabase.auth.getUser();
+    
     if (!user) return;
 
     // Buscar o id do aluno na tabela usuarios
@@ -687,14 +692,9 @@ export default function Simulados() {
           })
           .select()
           .single();
-        
-        if (questaoError) {
-          console.error('Erro ao criar questão:', questaoError);
-          alert('Erro ao criar questões. Por favor, tente novamente.');
-          setIsLoading(false);
-          return;
-        }
-        
+
+        if (questaoError) throw questaoError;
+
         // 3. Para cada alternativa da questão, inserir na tabela alternativas
         for (const alternativa of questao.alternativas) {
           const { error: alternativaError } = await supabase
@@ -706,13 +706,8 @@ export default function Simulados() {
               texto: alternativa.texto,
               correta: alternativa.correta
             });
-          
-          if (alternativaError) {
-            console.error('Erro ao criar alternativa:', alternativaError);
-            alert('Erro ao criar alternativas. Por favor, tente novamente.');
-            setIsLoading(false);
-            return;
-          }
+
+          if (alternativaError) throw alternativaError;
         }
       }
       
@@ -764,7 +759,56 @@ export default function Simulados() {
     }
   };
 
-  // Função para salvar o gabarito no banco de dados
+  // Função para carregar os simulados que o aluno já respondeu
+  const carregarSimuladosRespondidos = async () => {
+    try {
+      const supabase = createSupabaseClient();
+      
+      // Obter o ID do aluno atual (do usuário logado)
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('Usuário não autenticado.');
+        return;
+      }
+      
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userData) {
+        console.error('Dados do usuário não encontrados.');
+        return;
+      }
+      
+      const alunoId = userData.id;
+      
+      // Buscar simulados respondidos da nova tabela
+      const { data: simuladosData, error: simuladosError } = await supabase
+        .from('simulados_respondidos')
+        .select('simulado_id')
+        .eq('aluno_id', alunoId)
+        .eq('respondido', true);
+      
+      if (simuladosError) {
+        console.error('Erro ao buscar simulados respondidos:', simuladosError);
+        return;
+      }
+      
+      if (simuladosData && simuladosData.length > 0) {
+        // Extrair os IDs dos simulados respondidos
+        const simuladosIds = simuladosData.map(item => item.simulado_id);
+        setSimuladosRespondidos(simuladosIds);
+      } else {
+        setSimuladosRespondidos([]);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar simulados respondidos:', error);
+    }
+  };
+
   const salvarGabarito = async () => {
     if (!gabarito.simuladoId || gabarito.questoes.length === 0) {
       alert('Selecione um simulado e adicione pelo menos uma questão.');
@@ -903,7 +947,7 @@ export default function Simulados() {
         .select('id')
         .eq('user_id', user.id)
         .single();
-      
+
       if (!userData) {
         alert('Não foi possível encontrar suas informações. Por favor, contate o suporte.');
         return;
@@ -959,6 +1003,51 @@ export default function Simulados() {
         }
       }
       
+      // Registrar que o aluno respondeu este simulado na tabela simulados_respondidos
+      if (simuladoRespostaId) {
+        // Verificar se já existe um registro para este aluno e simulado
+        const { data: existingRecord, error: checkError } = await supabase
+          .from('simulados_respondidos')
+          .select('id')
+          .eq('aluno_id', alunoId)
+          .eq('simulado_id', simuladoRespostaId)
+          .single();
+          
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 é o código para "não encontrado"
+          console.error('Erro ao verificar registro existente:', checkError);
+        }
+        
+        if (existingRecord) {
+          // Atualizar o registro existente
+          const { error: updateError } = await supabase
+            .from('simulados_respondidos')
+            .update({
+              respondido: true,
+              data_resposta: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingRecord.id);
+            
+          if (updateError) {
+            console.error('Erro ao atualizar registro de simulado respondido:', updateError);
+          }
+        } else {
+          // Criar um novo registro
+          const { error: insertError } = await supabase
+            .from('simulados_respondidos')
+            .insert({
+              aluno_id: alunoId,
+              simulado_id: simuladoRespostaId,
+              respondido: true,
+              data_resposta: new Date().toISOString()
+            });
+            
+          if (insertError) {
+            console.error('Erro ao registrar simulado como respondido:', insertError);
+          }
+        }
+      }
+      
       // Calcular o percentual de acertos
       const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
       
@@ -970,9 +1059,153 @@ export default function Simulados() {
         mostrando: true
       });
       
+      // Atualizar a lista de simulados respondidos
+      if (simuladoRespostaId && !simuladosRespondidos.includes(simuladoRespostaId)) {
+        setSimuladosRespondidos([...simuladosRespondidos, simuladoRespostaId]);
+      }
+      
     } catch (error) {
       console.error('Erro ao salvar respostas:', error);
       alert('Ocorreu um erro ao salvar suas respostas. Por favor, tente novamente.');
+    }
+  };
+
+  // Função para carregar o desempenho do aluno em um simulado
+  const carregarDesempenhoSimulado = async (simuladoId: number) => {
+    try {
+      const supabase = createSupabaseClient();
+      
+      // Obter o ID do aluno atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        alert('Usuário não autenticado. Por favor, faça login novamente.');
+        return;
+      }
+      
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userData) {
+        alert('Não foi possível encontrar suas informações. Por favor, contate o suporte.');
+        return;
+      }
+      
+      const alunoId = userData.id;
+      
+      // Verificar se o aluno realmente respondeu este simulado
+      const { data: simuladoRespondido, error: checkError } = await supabase
+        .from('simulados_respondidos')
+        .select('*')
+        .eq('aluno_id', alunoId)
+        .eq('simulado_id', simuladoId)
+        .eq('respondido', true)
+        .single();
+      
+      if (checkError || !simuladoRespondido) {
+        console.error('Erro ao verificar se o simulado foi respondido:', checkError);
+        alert('Você ainda não respondeu este simulado ou o administrador resetou suas respostas.');
+        
+        // Remover da lista de simulados respondidos
+        setSimuladosRespondidos(simuladosRespondidos.filter(id => id !== simuladoId));
+        
+        // Redirecionar para o cartão resposta normal
+        abrirCartaoResposta({ id: simuladoId } as Simulado);
+        return;
+      }
+      
+      // Buscar as questões do simulado
+      const { data: questoes, error: questoesError } = await supabase
+        .from('questoes')
+        .select('id, numero')
+        .eq('simuladoExistente_id', simuladoId)
+        .order('numero', { ascending: true });
+      
+      if (questoesError) {
+        console.error('Erro ao buscar questões:', questoesError);
+        alert('Ocorreu um erro ao buscar as questões do simulado.');
+        return;
+      }
+      
+      if (!questoes || questoes.length === 0) {
+        alert('Não foram encontradas questões para este simulado.');
+        return;
+      }
+      
+      // Buscar as respostas do aluno para este simulado
+      const questoesIds = questoes.map(q => q.id);
+      const { data: respostasAluno, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id, alternativa_resposta')
+        .eq('aluno_id', alunoId)
+        .in('questao_id', questoesIds);
+      
+      if (respostasError) {
+        console.error('Erro ao buscar respostas do aluno:', respostasError);
+        alert('Ocorreu um erro ao buscar suas respostas.');
+        return;
+      }
+      
+      // Criar um mapa de respostas do aluno por questão
+      const respostasPorQuestao: { [key: string]: string } = {};
+      respostasAluno?.forEach(resposta => {
+        respostasPorQuestao[resposta.questao_id] = resposta.alternativa_resposta;
+      });
+      
+      // Buscar as alternativas corretas para o simulado
+      const { data: alternativas, error: alternativasError } = await supabase
+        .from('alternativas')
+        .select('questao_id, letra')
+        .eq('simuladoExistente_id', simuladoId)
+        .eq('correta', true);
+      
+      if (alternativasError) {
+        console.error('Erro ao buscar alternativas:', alternativasError);
+        alert('Ocorreu um erro ao buscar as alternativas corretas.');
+        return;
+      }
+      
+      // Criar um mapa de alternativas corretas por questão
+      const alternativasCorretas: { [key: string]: string } = {};
+      alternativas?.forEach(alt => {
+        alternativasCorretas[alt.questao_id] = alt.letra;
+      });
+      
+      // Calcular quantas questões o aluno acertou
+      let acertos = 0;
+      let total = questoes.length;
+      
+      for (const questao of questoes) {
+        const respostaAluno = respostasPorQuestao[questao.id];
+        const alternativaCorreta = alternativasCorretas[questao.id];
+        
+        if (respostaAluno && alternativaCorreta && 
+            respostaAluno.toLowerCase() === alternativaCorreta.toLowerCase()) {
+          acertos++;
+        }
+      }
+      
+      // Calcular o percentual de acertos
+      const percentual = total > 0 ? Math.round((acertos / total) * 100) : 0;
+      
+      // Configurar o modal para mostrar o resultado
+      setSimuladoRespostaId(simuladoId);
+      setResultadoSimulado({
+        acertos,
+        total,
+        percentual,
+        mostrando: true
+      });
+      
+      // Abrir o modal
+      setIsModalCartaoRespostaOpen(true);
+      
+    } catch (error) {
+      console.error('Erro ao carregar desempenho do simulado:', error);
+      alert('Ocorreu um erro ao carregar seu desempenho. Por favor, tente novamente.');
     }
   };
 
@@ -1166,11 +1399,11 @@ export default function Simulados() {
                     </button>
                     
                     <button
-                      className="flex items-center space-x-1 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 rounded-md text-sm"
-                      onClick={() => abrirCartaoResposta(simulado)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1.5 rounded-md text-sm flex items-center space-x-1"
+                      onClick={() => simuladosRespondidos.includes(simulado.id) ? carregarDesempenhoSimulado(simulado.id) : abrirCartaoResposta(simulado)}
                     >
                       <DocumentIcon className="h-4 w-4" />
-                      <span>Responder simulado</span>
+                      <span>{simuladosRespondidos.includes(simulado.id) ? "Ver desempenho" : "Responder simulado"}</span>
                     </button>
                     
                     <button
@@ -1319,7 +1552,7 @@ export default function Simulados() {
                     <label className="flex flex-col w-full h-16 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700 transition-all">
                       <div className="flex items-center justify-center h-full space-x-2">
                         <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 002 2V5a2 2 0 00-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 002 2V5a2 2 0 002-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <p className="text-sm text-gray-400">
                           {novoSimulado.arquivoQuestoes ? novoSimulado.arquivoQuestoes.name : 'Clique para selecionar'}
@@ -1346,7 +1579,7 @@ export default function Simulados() {
                     <label className="flex flex-col w-full h-16 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700 transition-all">
                       <div className="flex items-center justify-center h-full space-x-2">
                         <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 002 2V5a2 2 0 00-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 002 2V5a2 2 0 002-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <p className="text-sm text-gray-400">
                           {novoSimulado.arquivoGabarito ? novoSimulado.arquivoGabarito.name : 'Clique para selecionar'}
@@ -1418,7 +1651,7 @@ export default function Simulados() {
               >
                 {uploading ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
@@ -1656,7 +1889,7 @@ export default function Simulados() {
             <div className="flex justify-end mt-6">
               <button
                 onClick={() => setIsModalVerResultadoOpen(false)}
-                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
               >
                 Fechar
               </button>
