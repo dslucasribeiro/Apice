@@ -51,6 +51,8 @@ interface ResultadoSimulado {
   created_at: string;
 }
 
+type DificuldadeType = 'fácil' | 'média' | 'difícil';
+
 export default function Simulados() {
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [simulados, setSimulados] = useState<Simulado[]>([]);
@@ -108,7 +110,7 @@ export default function Simulados() {
     numero: number;
     enunciado: string;
     assunto: string;
-    dificuldade: string;
+    dificuldade: DificuldadeType;
     alternativas: {
       letra: string;
       texto: string;
@@ -118,7 +120,7 @@ export default function Simulados() {
   const [questaoAtual, setQuestaoAtual] = useState({
     enunciado: '',
     assunto: '',
-    dificuldade: 'Fácil',
+    dificuldade: 'fácil',
     alternativas: [
       { letra: 'a', texto: '', correta: false },
       { letra: 'b', texto: '', correta: false },
@@ -138,14 +140,14 @@ export default function Simulados() {
     questoes: [] as {
       numero: number;
       assunto: string;
-      dificuldade: string;
+      dificuldade: DificuldadeType;
       alternativaCorreta: string;
     }[]
   });
   const [questaoGabaritoAtual, setQuestaoGabaritoAtual] = useState({
     numero: 1,
     assunto: '',
-    dificuldade: 'Fácil',
+    dificuldade: 'fácil',
     alternativaCorreta: 'a'
   });
   const [simuladosDisponiveis, setSimuladosDisponiveis] = useState<Simulado[]>([]);
@@ -159,13 +161,34 @@ export default function Simulados() {
   const [questoesSimulado, setQuestoesSimulado] = useState<{numero: number, id: string}[]>([]);
   const [respostasAluno, setRespostasAluno] = useState<{[key: number]: string}>({});
 
-  // Adicionando estado para mostrar resultado do simulado
+  // Ampliando o estado de resultado do simulado para incluir mais estatísticas
   const [resultadoSimulado, setResultadoSimulado] = useState<{
     acertos: number,
+    erros: number,
     total: number,
     percentual: number,
-    mostrando: boolean
-  }>({ acertos: 0, total: 0, percentual: 0, mostrando: false });
+    mostrando: boolean,
+    estatisticasDificuldade: {
+      fácil: { total: number, acertos: number, percentual: number },
+      média: { total: number, acertos: number, percentual: number },
+      difícil: { total: number, acertos: number, percentual: number }
+    },
+    estatisticasAssunto: {
+      [assunto: string]: { total: number, acertos: number, percentual: number }
+    }
+  }>({
+    acertos: 0,
+    erros: 0,
+    total: 0,
+    percentual: 0,
+    mostrando: false,
+    estatisticasDificuldade: {
+      fácil: { total: 0, acertos: 0, percentual: 0 },
+      média: { total: 0, acertos: 0, percentual: 0 },
+      difícil: { total: 0, acertos: 0, percentual: 0 }
+    },
+    estatisticasAssunto: {}
+  });
 
   // Adicionando estado para controlar quais simulados o aluno já respondeu
   const [simuladosRespondidos, setSimuladosRespondidos] = useState<number[]>([]);
@@ -721,7 +744,7 @@ export default function Simulados() {
       setQuestaoAtual({
         enunciado: '',
         assunto: '',
-        dificuldade: 'Fácil',
+        dificuldade: 'fácil',
         alternativas: [
           { letra: 'a', texto: '', correta: false },
           { letra: 'b', texto: '', correta: false },
@@ -827,7 +850,7 @@ export default function Simulados() {
             "simuladoExistente_id": gabarito.simuladoId,
             numero: questao.numero,
             assunto: questao.assunto,
-            dificuldade: questao.dificuldade,
+            dificuldade: questao.dificuldade as DificuldadeType,
             enunciado: null // Campo opcional
           })
           .select()
@@ -865,12 +888,87 @@ export default function Simulados() {
     }
   };
 
-  const abrirCartaoResposta = (simulado: Simulado) => {
+  const abrirCartaoResposta = async (simulado: Simulado) => {
+    // Reset do estado de resultados do simulado para garantir que começamos com a tela de respostas
+    setResultadoSimulado({
+      acertos: 0,
+      erros: 0,
+      total: 0,
+      percentual: 0,
+      mostrando: false,
+      estatisticasDificuldade: {
+        fácil: { total: 0, acertos: 0, percentual: 0 },
+        média: { total: 0, acertos: 0, percentual: 0 },
+        difícil: { total: 0, acertos: 0, percentual: 0 }
+      },
+      estatisticasAssunto: {}
+    });
+    
     setIsModalCartaoRespostaOpen(true);
+    
     // Se o simulado já tiver sido passado, usamos o ID dele
     if (simulado && simulado.id) {
       setSimuladoRespostaId(simulado.id);
-      carregarQuestoesSimulado(simulado.id);
+      
+      // Verificar explicitamente se o simulado já foi respondido
+      const supabase = createSupabaseClient();
+      
+      // Obter o ID do aluno atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('Usuário não autenticado.');
+        carregarQuestoesSimulado(simulado.id);
+        return;
+      }
+      
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userData) {
+        console.error('Dados do usuário não encontrados.');
+        carregarQuestoesSimulado(simulado.id);
+        return;
+      }
+      
+      const alunoId = userData.id;
+      
+      // Buscar na tabela de simulados_respondidos
+      const { data: simuladoRespondido, error } = await supabase
+        .from('simulados_respondidos')
+        .select('*')
+        .eq('aluno_id', alunoId)
+        .eq('simulado_id', simulado.id)
+        .eq('respondido', true)
+        .single();
+      
+      if (error || !simuladoRespondido) {
+        console.log('Simulado não respondido ou erro na verificação:', error);
+        // Resetar o estado de resultados para garantir que mostramos a tela de cartão resposta
+        setResultadoSimulado({
+          acertos: 0,
+          erros: 0,
+          total: 0,
+          percentual: 0,
+          mostrando: false,
+          estatisticasDificuldade: {
+            fácil: { total: 0, acertos: 0, percentual: 0 },
+            média: { total: 0, acertos: 0, percentual: 0 },
+            difícil: { total: 0, acertos: 0, percentual: 0 }
+          },
+          estatisticasAssunto: {}
+        });
+        
+        // Carregar as questões do simulado
+        carregarQuestoesSimulado(simulado.id);
+      } else {
+        // Se já foi respondido, carrega as estatísticas de desempenho
+        console.log('Simulado já respondido, carregando desempenho');
+        carregarDesempenhoSimulado(simulado.id);
+      }
     } else {
       // Caso contrário, resetamos o estado
       setSimuladoRespostaId(null);
@@ -958,6 +1056,7 @@ export default function Simulados() {
       // Contadores para o resultado
       let totalQuestoes = Object.keys(respostasAluno).length;
       let acertos = 0;
+      let erros = 0;
       
       // Salvar as respostas para cada questão
       for (const numeroQuestao in respostasAluno) {
@@ -995,6 +1094,8 @@ export default function Simulados() {
               // Comparar a resposta do aluno com a alternativa correta (ambas em minúsculo)
               if (alternativaCorreta.letra.toLowerCase() === alternativaResposta.toLowerCase()) {
                 acertos++;
+              } else {
+                erros++;
               }
             } else {
               console.error('Erro ao buscar alternativa correta:', alternativaError);
@@ -1011,6 +1112,7 @@ export default function Simulados() {
           .select('id')
           .eq('aluno_id', alunoId)
           .eq('simulado_id', simuladoRespostaId)
+          .eq('respondido', true)
           .single();
           
         if (checkError && checkError.code !== 'PGRST116') { // PGRST116 é o código para "não encontrado"
@@ -1051,18 +1153,34 @@ export default function Simulados() {
       // Calcular o percentual de acertos
       const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
       
-      // Atualizar o estado de resultado
-      setResultadoSimulado({
-        acertos,
-        total: totalQuestoes,
-        percentual,
-        mostrando: true
-      });
-      
-      // Atualizar a lista de simulados respondidos
-      if (simuladoRespostaId && !simuladosRespondidos.includes(simuladoRespostaId)) {
-        setSimuladosRespondidos([...simuladosRespondidos, simuladoRespostaId]);
+      // Em vez de atualizar parcialmente o resultado, carregar o desempenho completo do simulado
+      if (simuladoRespostaId) {
+        // Fechar o modal de resposta brevemente para garantir que a interface seja atualizada adequadamente
+        setIsModalCartaoRespostaOpen(false);
+        
+        // Pequeno delay para permitir que as operações de banco de dados sejam concluídas
+        setTimeout(() => {
+          // Reabrir o modal com os dados completos
+          carregarDesempenhoSimulado(simuladoRespostaId);
+        }, 500);
+      } else {
+        // Caso de fallback (não deveria acontecer): usar os dados básicos que já calculamos
+        setResultadoSimulado({
+          acertos,
+          erros,
+          total: totalQuestoes,
+          percentual,
+          mostrando: true,
+          estatisticasDificuldade: {
+            fácil: { total: 0, acertos: 0, percentual: 0 },
+            média: { total: 0, acertos: 0, percentual: 0 },
+            difícil: { total: 0, acertos: 0, percentual: 0 }
+          },
+          estatisticasAssunto: {}
+        });
       }
+      
+      alert('Respostas salvas com sucesso!');
       
     } catch (error) {
       console.error('Erro ao salvar respostas:', error);
@@ -1097,7 +1215,7 @@ export default function Simulados() {
       const alunoId = userData.id;
       
       // Verificar se o aluno realmente respondeu este simulado
-      const { data: simuladoRespondido, error: checkError } = await supabase
+      const { data: simuladoRespondido, error } = await supabase
         .from('simulados_respondidos')
         .select('*')
         .eq('aluno_id', alunoId)
@@ -1105,22 +1223,38 @@ export default function Simulados() {
         .eq('respondido', true)
         .single();
       
-      if (checkError || !simuladoRespondido) {
-        console.error('Erro ao verificar se o simulado foi respondido:', checkError);
+      if (error || !simuladoRespondido) {
+        console.error('Erro ao verificar se o simulado foi respondido:', error);
         alert('Você ainda não respondeu este simulado ou o administrador resetou suas respostas.');
         
         // Remover da lista de simulados respondidos
         setSimuladosRespondidos(simuladosRespondidos.filter(id => id !== simuladoId));
         
         // Redirecionar para o cartão resposta normal
-        abrirCartaoResposta({ id: simuladoId } as Simulado);
+        // Resetar o estado de resultados para garantir que mostramos a tela de cartão resposta
+        setResultadoSimulado({
+          acertos: 0,
+          erros: 0,
+          total: 0,
+          percentual: 0,
+          mostrando: false,
+          estatisticasDificuldade: {
+            fácil: { total: 0, acertos: 0, percentual: 0 },
+            média: { total: 0, acertos: 0, percentual: 0 },
+            difícil: { total: 0, acertos: 0, percentual: 0 }
+          },
+          estatisticasAssunto: {}
+        });
+        
+        // Carregar as questões do simulado
+        carregarQuestoesSimulado(simuladoId);
         return;
       }
       
       // Buscar as questões do simulado
       const { data: questoes, error: questoesError } = await supabase
         .from('questoes')
-        .select('id, numero')
+        .select('id, numero, assunto, dificuldade')
         .eq('simuladoExistente_id', simuladoId)
         .order('numero', { ascending: true });
       
@@ -1176,17 +1310,64 @@ export default function Simulados() {
       
       // Calcular quantas questões o aluno acertou
       let acertos = 0;
+      let erros = 0;
       let total = questoes.length;
+      
+      // Inicializar estatísticas por dificuldade e assunto
+      const estatisticasDificuldade = {
+        fácil: { total: 0, acertos: 0, percentual: 0 },
+        média: { total: 0, acertos: 0, percentual: 0 },
+        difícil: { total: 0, acertos: 0, percentual: 0 }
+      };
+      const estatisticasAssunto: { [assunto: string]: { total: number, acertos: number, percentual: number } } = {};
       
       for (const questao of questoes) {
         const respostaAluno = respostasPorQuestao[questao.id];
         const alternativaCorreta = alternativasCorretas[questao.id];
+        const dificuldade = questao.dificuldade.toLowerCase() as DificuldadeType;
+        
+        // Garantir que a dificuldade seja uma das três opções válidas
+        const dificuldadeValida: DificuldadeType = 
+          ['fácil', 'média', 'difícil'].includes(dificuldade) 
+            ? dificuldade 
+            : 'média';
+        
+        // Incrementar o total para esta dificuldade
+        estatisticasDificuldade[dificuldadeValida].total++;
+        
+        // Inicializar estatísticas para este assunto se necessário
+        if (!estatisticasAssunto[questao.assunto]) {
+          estatisticasAssunto[questao.assunto] = { total: 0, acertos: 0, percentual: 0 };
+        }
+        estatisticasAssunto[questao.assunto].total++;
         
         if (respostaAluno && alternativaCorreta && 
             respostaAluno.toLowerCase() === alternativaCorreta.toLowerCase()) {
           acertos++;
+          estatisticasDificuldade[dificuldadeValida].acertos++;
+          estatisticasAssunto[questao.assunto].acertos++;
+        } else {
+          erros++;
         }
       }
+      
+      // Calcular percentuais por dificuldade e assunto
+      Object.keys(estatisticasDificuldade).forEach((dificuldade) => {
+        const diff = dificuldade as DificuldadeType;
+        if (estatisticasDificuldade[diff].total > 0) {
+          estatisticasDificuldade[diff].percentual = Math.round(
+            (estatisticasDificuldade[diff].acertos / estatisticasDificuldade[diff].total) * 100
+          );
+        }
+      });
+      
+      Object.keys(estatisticasAssunto).forEach((assunto) => {
+        if (estatisticasAssunto[assunto].total > 0) {
+          estatisticasAssunto[assunto].percentual = Math.round(
+            (estatisticasAssunto[assunto].acertos / estatisticasAssunto[assunto].total) * 100
+          );
+        }
+      });
       
       // Calcular o percentual de acertos
       const percentual = total > 0 ? Math.round((acertos / total) * 100) : 0;
@@ -1195,12 +1376,15 @@ export default function Simulados() {
       setSimuladoRespostaId(simuladoId);
       setResultadoSimulado({
         acertos,
+        erros,
         total,
         percentual,
-        mostrando: true
+        mostrando: true,
+        estatisticasDificuldade,
+        estatisticasAssunto
       });
       
-      // Abrir o modal
+      // Abrir o modal para exibir o resultado
       setIsModalCartaoRespostaOpen(true);
       
     } catch (error) {
@@ -1441,7 +1625,7 @@ export default function Simulados() {
                 onClick={() => setIsModalEscolhaTipoOpen(false)}
                 className="text-gray-400 hover:text-white"
               >
-                <XMarkIcon className="h-5 w-5" />
+                <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
             
@@ -1676,7 +1860,7 @@ export default function Simulados() {
                 className="text-white hover:text-gray-300"
               >
                 <span className="sr-only">Fechar</span>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -2034,12 +2218,12 @@ export default function Simulados() {
                         </label>
                         <select
                           value={questaoAtual.dificuldade}
-                          onChange={(e) => setQuestaoAtual({...questaoAtual, dificuldade: e.target.value})}
+                          onChange={(e) => setQuestaoAtual({...questaoAtual, dificuldade: e.target.value as DificuldadeType})}
                           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
                         >
-                          <option value="Fácil">Fácil</option>
-                          <option value="Médio">Médio</option>
-                          <option value="Difícil">Difícil</option>
+                          <option value="fácil">Fácil</option>
+                          <option value="média">Médio</option>
+                          <option value="difícil">Difícil</option>
                         </select>
                       </div>
                     </div>
@@ -2106,7 +2290,7 @@ export default function Simulados() {
                             numero: questoes.length + 1,
                             enunciado: questaoAtual.enunciado,
                             assunto: questaoAtual.assunto,
-                            dificuldade: questaoAtual.dificuldade,
+                            dificuldade: questaoAtual.dificuldade as DificuldadeType,
                             alternativas: questaoAtual.alternativas
                           }
                         ]);
@@ -2115,7 +2299,7 @@ export default function Simulados() {
                         setQuestaoAtual({
                           enunciado: '',
                           assunto: '',
-                          dificuldade: 'Fácil',
+                          dificuldade: 'fácil',
                           alternativas: [
                             { letra: 'a', texto: '', correta: false },
                             { letra: 'b', texto: '', correta: false },
@@ -2144,7 +2328,7 @@ export default function Simulados() {
                       setQuestaoAtual({
                         enunciado: '',
                         assunto: '',
-                        dificuldade: 'Fácil',
+                        dificuldade: 'fácil',
                         alternativas: [
                           { letra: 'a', texto: '', correta: false },
                           { letra: 'b', texto: '', correta: false },
@@ -2283,12 +2467,12 @@ export default function Simulados() {
                       </label>
                       <select
                         value={questaoGabaritoAtual.dificuldade}
-                        onChange={(e) => setQuestaoGabaritoAtual({ ...questaoGabaritoAtual, dificuldade: e.target.value })}
+                        onChange={(e) => setQuestaoGabaritoAtual({ ...questaoGabaritoAtual, dificuldade: e.target.value as DificuldadeType })}
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
                       >
-                        <option value="Fácil">Fácil</option>
-                        <option value="Médio">Médio</option>
-                        <option value="Difícil">Difícil</option>
+                        <option value="fácil">Fácil</option>
+                        <option value="média">Médio</option>
+                        <option value="difícil">Difícil</option>
                       </select>
                     </div>
                   </div>
@@ -2311,7 +2495,7 @@ export default function Simulados() {
                               numero: questaoGabaritoAtual.numero,
                               assunto: questaoGabaritoAtual.assunto,
                               alternativaCorreta: questaoGabaritoAtual.alternativaCorreta,
-                              dificuldade: questaoGabaritoAtual.dificuldade
+                              dificuldade: questaoGabaritoAtual.dificuldade as DificuldadeType
                             }
                           ]
                         });
@@ -2320,7 +2504,7 @@ export default function Simulados() {
                         setQuestaoGabaritoAtual({
                           numero: gabarito.questoes.length + 2,
                           assunto: '',
-                          dificuldade: 'Fácil',
+                          dificuldade: 'fácil',
                           alternativaCorreta: 'a'
                         });
                       }}
@@ -2368,11 +2552,11 @@ export default function Simulados() {
           <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4 my-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-white">
-                {resultadoSimulado.mostrando ? "Resultado do Simulado" : "Responder Simulado"}
+                {resultadoSimulado.mostrando ? "Resultado do Simulado" : "Cartão Resposta"}
               </h2>
               <button onClick={() => {
                 setIsModalCartaoRespostaOpen(false);
-                setResultadoSimulado({ acertos: 0, total: 0, percentual: 0, mostrando: false });
+                setResultadoSimulado({ acertos: 0, erros: 0, total: 0, percentual: 0, mostrando: false, estatisticasDificuldade: { fácil: { total: 0, acertos: 0, percentual: 0 }, média: { total: 0, acertos: 0, percentual: 0 }, difícil: { total: 0, acertos: 0, percentual: 0 } }, estatisticasAssunto: {} });
                 setSimuladoRespostaId(null);
                 setQuestoesSimulado([]);
                 setRespostasAluno({});
@@ -2384,16 +2568,129 @@ export default function Simulados() {
             {/* Resultado do simulado */}
             {resultadoSimulado.mostrando ? (
               <div className="text-center">
-                <div className="bg-gray-800 p-8 rounded-lg mb-6">
+                <div className="bg-gray-800 p-6 rounded-lg mb-6">
                   <h3 className="text-2xl font-bold text-white mb-4">Seu Resultado</h3>
                   
-                  <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-blue-500 mb-6">
-                    <span className="text-3xl font-bold text-white">{resultadoSimulado.percentual}%</span>
+                  {/* Cards com métricas de acertos, erros e aproveitamento percentual */}
+                  <div className="flex flex-wrap justify-around gap-4 mb-6">
+                    <div className="flex flex-col items-center bg-blue-600 p-4 rounded-lg w-32">
+                      <span className="text-sm text-white mb-1">Acertos</span>
+                      <span className="text-3xl font-bold text-white">{resultadoSimulado.acertos}</span>
+                      <span className="text-sm text-white">questões</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-center bg-red-600 p-4 rounded-lg w-32">
+                      <span className="text-sm text-white mb-1">Erros</span>
+                      <span className="text-3xl font-bold text-white">{resultadoSimulado.erros}</span>
+                      <span className="text-sm text-white">questões</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-center bg-purple-600 p-4 rounded-lg w-32">
+                      <span className="text-sm text-white mb-1">Aproveitamento</span>
+                      <span className="text-3xl font-bold text-white">{resultadoSimulado.percentual}%</span>
+                    </div>
                   </div>
                   
-                  <p className="text-xl text-white mb-2">
-                    Você acertou <span className="font-bold text-green-400">{resultadoSimulado.acertos}</span> de <span className="font-bold">{resultadoSimulado.total}</span> questões
-                  </p>
+                  {/* Desempenho por dificuldade */}
+                  <div className="mb-6 text-left">
+                    <h4 className="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">
+                      Desempenho por Dificuldade
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-green-500 bg-opacity-20 p-3 rounded-lg border border-green-500">
+                        <h5 className="text-base font-medium text-white mb-2">Fácil</h5>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white">
+                            {resultadoSimulado.estatisticasDificuldade.fácil.acertos} / {resultadoSimulado.estatisticasDificuldade.fácil.total}
+                          </span>
+                          <span className="text-lg font-bold text-white">
+                            {resultadoSimulado.estatisticasDificuldade.fácil.percentual}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                          <div 
+                            className="bg-green-500 h-2.5 rounded-full" 
+                            style={{width: `${resultadoSimulado.estatisticasDificuldade.fácil.percentual}%`}}
+                          ></div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-yellow-500 bg-opacity-20 p-3 rounded-lg border border-yellow-500">
+                        <h5 className="text-base font-medium text-white mb-2">Médio</h5>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white">
+                            {resultadoSimulado.estatisticasDificuldade.média.acertos} / {resultadoSimulado.estatisticasDificuldade.média.total}
+                          </span>
+                          <span className="text-lg font-bold text-white">
+                            {resultadoSimulado.estatisticasDificuldade.média.percentual}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                          <div 
+                            className="bg-yellow-500 h-2.5 rounded-full" 
+                            style={{width: `${resultadoSimulado.estatisticasDificuldade.média.percentual}%`}}
+                          ></div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-red-500 bg-opacity-20 p-3 rounded-lg border border-red-500">
+                        <h5 className="text-base font-medium text-white mb-2">Difícil</h5>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white">
+                            {resultadoSimulado.estatisticasDificuldade.difícil.acertos} / {resultadoSimulado.estatisticasDificuldade.difícil.total}
+                          </span>
+                          <span className="text-lg font-bold text-white">
+                            {resultadoSimulado.estatisticasDificuldade.difícil.percentual}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                          <div 
+                            className="bg-red-500 h-2.5 rounded-full" 
+                            style={{width: `${resultadoSimulado.estatisticasDificuldade.difícil.percentual}%`}}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Desempenho por assunto */}
+                  <div className="text-left">
+                    <h4 className="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">
+                      Desempenho por Assunto
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3">
+                      {Object.keys(resultadoSimulado.estatisticasAssunto).map((assunto, index) => {
+                        const estatistica = resultadoSimulado.estatisticasAssunto[assunto];
+                        // Cores alternadas para os assuntos
+                        const bgColorClass = index % 2 === 0 ? 'bg-blue-500' : 'bg-purple-500';
+                        const borderColorClass = index % 2 === 0 ? 'border-blue-500' : 'border-purple-500';
+                        return (
+                          <div key={assunto} className={`${bgColorClass} bg-opacity-20 p-3 rounded-lg border ${borderColorClass}`}>
+                            <h5 className="text-base font-medium text-white mb-2">{assunto}</h5>
+                            <div className="flex items-center justify-between">
+                              <span className="text-white">
+                                {estatistica.acertos} / {estatistica.total}
+                              </span>
+                              <span className="text-lg font-bold text-white">
+                                {estatistica.percentual}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                              <div 
+                                className={`${bgColorClass} h-2.5 rounded-full`} 
+                                style={{width: `${estatistica.percentual}%`}}
+                              ></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {Object.keys(resultadoSimulado.estatisticasAssunto).length === 0 && (
+                        <div className="text-gray-400 text-center py-4">
+                          Nenhuma informação de assunto disponível
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   
                   <div className="mt-6">
                     {resultadoSimulado.percentual >= 70 ? (
@@ -2411,146 +2708,83 @@ export default function Simulados() {
                     )}
                   </div>
                 </div>
-                
-                <button
-                  onClick={() => {
-                    setIsModalCartaoRespostaOpen(false);
-                    setResultadoSimulado({ acertos: 0, total: 0, percentual: 0, mostrando: false });
-                    setSimuladoRespostaId(null);
-                    setQuestoesSimulado([]);
-                    setRespostasAluno({});
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md text-lg font-medium"
-                >
-                  Fechar
-                </button>
               </div>
             ) : (
-              <>
-                {/* Seleção de simulado quando nenhum foi passado diretamente */}
-                {!simuladoRespostaId && (
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Selecione o Simulado
-                    </label>
-                    <select
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      onChange={(e) => handleSimuladoRespostaChange(parseInt(e.target.value))}
-                      value={simuladoRespostaId || ""}
-                    >
-                      <option value="">Selecione um simulado</option>
-                      {simuladosDisponiveis.map((simulado) => (
-                        <option key={simulado.id} value={simulado.id}>
-                          {simulado.titulo}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-lg p-6 shadow-lg">
+                <h2 className="text-2xl font-bold text-white mb-4 text-center">
+                  Cartão Resposta
+                </h2>
                 
-                {/* Se um simulado foi selecionado, mostra as questões */}
-                {simuladoRespostaId && (
-                  <div className="space-y-4">
-                    {questoesSimulado.length > 0 ? (
-                      <div className="space-y-4">
-                        {questoesSimulado.map((questao, index) => (
-                          <div key={index} className="bg-gray-800 p-4 rounded-lg">
-                            <h3 className="text-lg font-medium text-white mb-2">Questão {questao.numero}</h3>
-                            <div className="flex flex-col space-y-2">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-gray-300 font-medium">A)</span>
-                                <input
-                                  type="radio"
-                                  name={`questao-${questao.numero}`}
-                                  value="A"
-                                  checked={respostasAluno[questao.numero] === 'A'}
-                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
-                                />
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-gray-300 font-medium">B)</span>
-                                <input
-                                  type="radio"
-                                  name={`questao-${questao.numero}`}
-                                  value="B"
-                                  checked={respostasAluno[questao.numero] === 'B'}
-                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
-                                />
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-gray-300 font-medium">C)</span>
-                                <input
-                                  type="radio"
-                                  name={`questao-${questao.numero}`}
-                                  value="C"
-                                  checked={respostasAluno[questao.numero] === 'C'}
-                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
-                                />
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-gray-300 font-medium">D)</span>
-                                <input
-                                  type="radio"
-                                  name={`questao-${questao.numero}`}
-                                  value="D"
-                                  checked={respostasAluno[questao.numero] === 'D'}
-                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
-                                />
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-gray-300 font-medium">E)</span>
-                                <input
-                                  type="radio"
-                                  name={`questao-${questao.numero}`}
-                                  value="E"
-                                  checked={respostasAluno[questao.numero] === 'E'}
-                                  onChange={(e) => handleRespostaChange(questao.numero, e.target.value)}
-                                  className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-700"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                {/* Instruções para responder o simulado */}
+                <div className="bg-gray-700 rounded-lg p-4 mb-6">
+                  <p className="text-white mb-3">
+                    Selecione a alternativa que você considera correta para cada questão abaixo.
+                  </p>
+                  <p className="text-yellow-400 text-sm">
+                    Importante: Responda todas as questões antes de enviar suas respostas.
+                  </p>
+                </div>
+                
+                {/* Lista de questões para responder */}
+                <div className="space-y-4 mb-6">
+                  {questoesSimulado.length > 0 ? (
+                    questoesSimulado.map((questao) => (
+                      <div key={questao.id} className="bg-gray-700 p-4 rounded-lg">
+                        <div className="flex items-center mb-3">
+                          <span className="bg-blue-600 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center">
+                            {questao.numero}
+                          </span>
+                          <span className="ml-3 text-lg text-white font-medium">Questão {questao.numero}</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-5 gap-2">
+                          {['A', 'B', 'C', 'D', 'E'].map((letra) => (
+                            <button
+                              key={letra}
+                              onClick={() => handleRespostaChange(questao.numero, letra)}
+                              className={`py-3 px-4 rounded-md text-center font-medium ${
+                                respostasAluno[questao.numero] === letra
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-600 text-gray-200 hover:bg-gray-500'
+                              }`}
+                            >
+                              {letra}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="bg-gray-800 p-6 rounded-lg text-center">
-                        <p className="text-lg text-gray-300">
-                          Não foram encontradas questões para este simulado.
-                        </p>
-                        <p className="text-sm text-gray-400 mt-2">
-                          Por favor, entre em contato com o administrador.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="text-center py-10">
+                      <p className="text-gray-400">Nenhuma questão disponível para este simulado.</p>
+                    </div>
+                  )}
+                </div>
                 
                 {/* Botões de ação */}
-                <div className="flex justify-end space-x-3 mt-6">
+                <div className="flex justify-end space-x-3">
                   <button
+                    type="button"
                     onClick={() => {
-                      // Limpar o formulário e fechar o modal
+                      setIsModalCartaoRespostaOpen(false);
+                      setResultadoSimulado({ acertos: 0, erros: 0, total: 0, percentual: 0, mostrando: false, estatisticasDificuldade: { fácil: { total: 0, acertos: 0, percentual: 0 }, média: { total: 0, acertos: 0, percentual: 0 }, difícil: { total: 0, acertos: 0, percentual: 0 } }, estatisticasAssunto: {} });
                       setSimuladoRespostaId(null);
                       setQuestoesSimulado([]);
                       setRespostasAluno({});
-                      setIsModalCartaoRespostaOpen(false);
                     }}
-                    className="px-4 py-2 text-gray-400 hover:text-white"
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md"
                   >
                     Cancelar
                   </button>
                   <button
+                    type="button"
                     onClick={salvarRespostasAluno}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md"
                   >
                     Salvar Respostas
                   </button>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
