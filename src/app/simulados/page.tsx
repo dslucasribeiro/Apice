@@ -1193,7 +1193,7 @@ export default function Simulados() {
     try {
       const supabase = createSupabaseClient();
       
-      // Obter o ID do aluno atual
+      // Obter o ID do aluno atual (do usuário logado)
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -1440,7 +1440,7 @@ export default function Simulados() {
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
                 onClick={() => setIsModalEscolhaTipoOpen(true)}
               >
-                Criar simulado
+                Vincular Gabarito
               </button>
               {pastaAtual !== null && (
                 <button
@@ -1450,12 +1450,14 @@ export default function Simulados() {
                   Novo Simulado
                 </button>
               )}
+              {/* Botão "Adicionar Resultado" temporariamente ocultado 
               <button
                 onClick={() => setIsModalResultadoOpen(true)}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md"
               >
                 Adicionar Resultado
               </button>
+              */}
             </div>
           )}
           {userType?.toLowerCase() === 'aluno' && (
@@ -1885,7 +1887,7 @@ export default function Simulados() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg max-w-2xl w-full">
             <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-white">Adicionar Resultado</h2>
                 <button onClick={() => setIsModalResultadoOpen(false)} className="text-gray-400 hover:text-white">
                   <XMarkIcon className="w-6 h-6" />
@@ -2549,7 +2551,7 @@ export default function Simulados() {
       {/* Modal de Cartão Resposta */}
       {isModalCartaoRespostaOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4 my-8">
+          <div className="bg-gray-900 p-4 rounded-lg w-full max-w-2xl mx-auto my-4">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-white">
                 {resultadoSimulado.mostrando ? "Resultado do Simulado" : "Cartão Resposta"}
@@ -2568,11 +2570,11 @@ export default function Simulados() {
             {/* Resultado do simulado */}
             {resultadoSimulado.mostrando ? (
               <div className="text-center">
-                <div className="bg-gray-800 p-6 rounded-lg mb-6">
+                <div className="bg-gray-800 p-4 rounded-lg mb-4">
                   <h3 className="text-2xl font-bold text-white mb-4">Seu Resultado</h3>
                   
                   {/* Cards com métricas de acertos, erros e aproveitamento percentual */}
-                  <div className="flex flex-wrap justify-around gap-4 mb-6">
+                  <div className="flex flex-wrap justify-around gap-3 mb-4">
                     <div className="flex flex-col items-center bg-blue-600 p-4 rounded-lg w-32">
                       <span className="text-sm text-white mb-1">Acertos</span>
                       <span className="text-3xl font-bold text-white">{resultadoSimulado.acertos}</span>
@@ -2592,7 +2594,7 @@ export default function Simulados() {
                   </div>
                   
                   {/* Desempenho por dificuldade */}
-                  <div className="mb-6 text-left">
+                  <div className="mb-4 text-left">
                     <h4 className="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">
                       Desempenho por Dificuldade
                     </h4>
@@ -2654,7 +2656,7 @@ export default function Simulados() {
                   </div>
                   
                   {/* Desempenho por assunto */}
-                  <div className="text-left">
+                  <div className="text-left max-h-[30vh] overflow-y-auto pr-2">
                     <h4 className="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">
                       Desempenho por Assunto
                     </h4>
@@ -2710,7 +2712,7 @@ export default function Simulados() {
                 </div>
               </div>
             ) : (
-              <div className="w-full max-w-4xl mx-auto bg-gray-800 rounded-lg p-6 shadow-lg">
+              <div className="w-full mx-auto bg-gray-800 rounded-lg p-4 shadow-lg">
                 <h2 className="text-2xl font-bold text-white mb-4 text-center">
                   Cartão Resposta
                 </h2>
@@ -2726,10 +2728,10 @@ export default function Simulados() {
                 </div>
                 
                 {/* Lista de questões para responder */}
-                <div className="space-y-4 mb-6">
+                <div className="space-y-3 mb-4 max-h-[60vh] overflow-y-auto pr-2">
                   {questoesSimulado.length > 0 ? (
                     questoesSimulado.map((questao) => (
-                      <div key={questao.id} className="bg-gray-700 p-4 rounded-lg">
+                      <div key={questao.id} className="bg-gray-700 p-3 rounded-lg">
                         <div className="flex items-center mb-3">
                           <span className="bg-blue-600 text-white font-bold rounded-full w-8 h-8 flex items-center justify-center">
                             {questao.numero}
