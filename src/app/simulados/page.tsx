@@ -1460,6 +1460,7 @@ export default function Simulados() {
               */}
             </div>
           )}
+          {/* Botão "Ver Resultado" temporariamente ocultado
           {userType?.toLowerCase() === 'aluno' && (
             <button
               onClick={handleVerResultado}
@@ -1468,6 +1469,7 @@ export default function Simulados() {
               Ver Resultado
             </button>
           )}
+          */}
         </div>
 
         {loading ? (
