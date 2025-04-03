@@ -133,6 +133,22 @@ export default function Simulados() {
   // Novo estado para o modal de escolha de tipo de simulado
   const [isModalEscolhaTipoOpen, setIsModalEscolhaTipoOpen] = useState(false);
 
+  // Estado para o modal de gabaritos vinculados
+  const [isModalGabaritosVinculadosOpen, setIsModalGabaritosVinculadosOpen] = useState(false);
+  
+  // Estado para o modal de visualização de alternativas do gabarito
+  const [isModalAlternativasGabaritoOpen, setIsModalAlternativasGabaritoOpen] = useState(false);
+  const [alternativasGabarito, setAlternativasGabarito] = useState<{
+    simuladoId: number | null;
+    titulo: string;
+    alternativas: {
+      numero: number;
+      letra: string;
+      assunto: string;
+      dificuldade: DificuldadeType;
+    }[];
+  }>({ simuladoId: null, titulo: '', alternativas: [] });
+
   // Estados para o modal de gabarito
   const [isModalGabaritoOpen, setIsModalGabaritoOpen] = useState(false);
   const [gabarito, setGabarito] = useState({
@@ -415,6 +431,65 @@ export default function Simulados() {
       setShowPdfModal(true);
     }
   };
+  
+  // Função para visualizar as alternativas do gabarito
+  const visualizarAlternativasGabarito = async (simuladoId: number, titulo: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Fazer a requisição para buscar as alternativas do gabarito
+      const supabase = createSupabaseClient();
+      let query = supabase
+        .from('alternativas')
+        .select('id, letra, texto, correta, questao_id, "simuladoExistente_id", questoes(numero, assunto, dificuldade)')
+        .eq('simuladoExistente_id', simuladoId)
+        .eq('correta', true);
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        throw error;
+      }
+
+      console.log('Alternativas encontradas:', data);
+      
+      if (!data || data.length === 0) {
+        alert('Nenhuma alternativa correta encontrada para este simulado.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Formatar os dados para exibição
+      const alternativasFormatadas = data
+        .map((alt, index) => {
+          // Se questoes for um array, pegamos o primeiro elemento
+          const questao = Array.isArray(alt.questoes) ? alt.questoes[0] : alt.questoes;
+          
+          return {
+            numero: questao?.numero || index + 1, // Usar índice+1 como fallback para número
+            letra: alt.letra,
+            assunto: questao?.assunto || 'Não especificado',
+            dificuldade: questao?.dificuldade || 'média'
+          };
+        })
+        .sort((a, b) => a.numero - b.numero); // Ordenar por número
+
+      setAlternativasGabarito({
+        simuladoId,
+        titulo,
+        alternativas: alternativasFormatadas
+      });
+      
+      // Abrir o modal de alternativas do gabarito
+      setIsModalAlternativasGabaritoOpen(true);
+    } catch (error) {
+      console.error('Erro ao buscar alternativas do gabarito:', error);
+      alert('Erro ao buscar as alternativas deste simulado.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
     return (
@@ -1622,7 +1697,7 @@ export default function Simulados() {
       {/* Modal de Escolha de Tipo de Simulado */}
       {isModalEscolhaTipoOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-md mx-4">
+          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-4xl mx-4">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-white">Escolha o tipo de simulado</h2>
               <button 
@@ -1633,7 +1708,7 @@ export default function Simulados() {
               </button>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <button
                 onClick={() => {
                   setIsModalEscolhaTipoOpen(false);
@@ -1656,6 +1731,18 @@ export default function Simulados() {
                 <DocumentCheckIcon className="h-10 w-10 mb-2" />
                 <span className="text-lg font-medium">Gabarito</span>
                 <p className="text-xs text-gray-300 mt-1 text-center">Adicione apenas um gabarito</p>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsModalEscolhaTipoOpen(false);
+                  setIsModalGabaritosVinculadosOpen(true);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white py-6 px-4 rounded-lg flex flex-col items-center justify-center transition-colors"
+              >
+                <DocumentIcon className="h-10 w-10 mb-2" />
+                <span className="text-lg font-medium">Gabaritos vinculados</span>
+                <p className="text-xs text-gray-300 mt-1 text-center">Consulte gabaritos vinculados</p>
               </button>
             </div>
           </div>
@@ -1692,6 +1779,66 @@ export default function Simulados() {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
               >
                 Criar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gabaritos Vinculados */}
+      {isModalGabaritosVinculadosOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-5 rounded-lg w-full max-w-2xl mx-auto my-4 modal-compact">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Gabaritos Vinculados</h2>
+              <button 
+                onClick={() => setIsModalGabaritosVinculadosOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="bg-gray-800 p-4 rounded-lg mb-4">
+              <div className="modal-content-scroll">
+                {simuladosDisponiveis.length > 0 ? (
+                  <div className="space-y-3">
+                    {simuladosDisponiveis.map((simulado) => (
+                      <div key={simulado.id} className="bg-gray-700 p-3 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <h3 className="font-medium text-white">{simulado.titulo}</h3>
+                            {simulado.descricao && (
+                              <p className="text-gray-400 text-sm">{simulado.descricao}</p>
+                            )}
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => visualizarAlternativasGabarito(simulado.id, simulado.titulo)}
+                              className="flex items-center space-x-1 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-md text-sm"
+                            >
+                              <DocumentCheckIcon className="h-4 w-4" />
+                              <span>Ver Gabarito</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-gray-400">Nenhum gabarito vinculado encontrado.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsModalGabaritosVinculadosOpen(false)}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+              >
+                Fechar
               </button>
             </div>
           </div>
@@ -2790,6 +2937,74 @@ export default function Simulados() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Alternativas do Gabarito */}
+      {isModalAlternativasGabaritoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-5 rounded-lg w-full max-w-3xl mx-auto my-4 modal-compact">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Gabarito: {alternativasGabarito.titulo}</h2>
+              <button 
+                onClick={() => setIsModalAlternativasGabaritoOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="bg-gray-800 p-4 rounded-lg mb-4">
+              <div className="modal-content-scroll max-h-[60vh] overflow-y-auto pr-2">
+                {alternativasGabarito.alternativas.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-12 text-gray-400 text-sm font-semibold mb-2 px-2">
+                      <div className="col-span-2">Questão</div>
+                      <div className="col-span-2">Alternativa</div>
+                      <div className="col-span-5">Assunto</div>
+                      <div className="col-span-3">Dificuldade</div>
+                    </div>
+                    
+                    {alternativasGabarito.alternativas.map((alt) => (
+                      <div 
+                        key={alt.numero} 
+                        className="grid grid-cols-12 bg-gray-700 p-3 rounded-lg items-center"
+                      >
+                        <div className="col-span-2 text-white font-semibold">{alt.numero}</div>
+                        <div className="col-span-2">
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white font-bold uppercase">
+                            {alt.letra}
+                          </span>
+                        </div>
+                        <div className="col-span-5 text-white">{alt.assunto}</div>
+                        <div className="col-span-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                            ${alt.dificuldade === 'fácil' ? 'bg-green-500 bg-opacity-20 text-green-300 border border-green-500' : 
+                              alt.dificuldade === 'média' ? 'bg-yellow-500 bg-opacity-20 text-yellow-300 border border-yellow-500' : 
+                              'bg-red-500 bg-opacity-20 text-red-300 border border-red-500'}`}>
+                            {alt.dificuldade}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-400">
+                    <p>Nenhuma alternativa cadastrada para este simulado.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsModalAlternativasGabaritoOpen(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
