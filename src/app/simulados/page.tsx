@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import Navigation from '@/components/Navigation';
-import { FolderIcon, DocumentIcon, PlayCircleIcon, DocumentCheckIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { FolderIcon, DocumentIcon, PlayCircleIcon, DocumentCheckIcon, TrashIcon, XMarkIcon, PencilIcon } from '@heroicons/react/24/outline';
 
 interface Pasta {
   id: number;
@@ -87,6 +87,14 @@ export default function Simulados() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [isEditingPasta, setIsEditingPasta] = useState<number | null>(null);
   const [editPastaTitle, setEditPastaTitle] = useState('');
+  const [isEditingSimulado, setIsEditingSimulado] = useState<number | null>(null);
+  const [editSimulado, setEditSimulado] = useState({
+    titulo: '',
+    pdf_questoes: '',
+    pdf_gabarito: '',
+    video_resolucao: ''
+  });
+  const [isModalEditSimuladoOpen, setIsModalEditSimuladoOpen] = useState(false);
   const [isModalResultadoOpen, setIsModalResultadoOpen] = useState(false);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [novoResultado, setNovoResultado] = useState<NovoResultado>({
@@ -538,14 +546,63 @@ export default function Simulados() {
     setIsModalResolucaoOpen(true);
   };
 
-  const handleEditPasta = async (pastaId: number) => {
-    if (userType?.toLowerCase() !== 'admin') return;
-
+  const handleEditPasta = (pastaId: number) => {
     const pasta = pastas.find(p => p.id === pastaId);
-    if (!pasta) return;
+    if (pasta) {
+      setIsEditingPasta(pastaId);
+      setEditPastaTitle(pasta.titulo);
+    }
+  };
+  
+  const handleEditSimulado = (simulado: Simulado) => {
+    if (userType?.toLowerCase() !== 'admin') return;
+    
+    setIsEditingSimulado(simulado.id);
+    setEditSimulado({
+      titulo: simulado.titulo,
+      pdf_questoes: simulado.pdf_questoes,
+      pdf_gabarito: simulado.pdf_gabarito,
+      video_resolucao: simulado.video_resolucao || ''
+    });
+    setIsModalEditSimuladoOpen(true);
+  };
 
-    setIsEditingPasta(pastaId);
-    setEditPastaTitle(pasta.titulo);
+  const handleSaveEditSimulado = async () => {
+    if (!isEditingSimulado || userType?.toLowerCase() !== 'admin') return;
+    
+    const supabase = createSupabaseClient();
+    try {
+      const { data, error } = await supabase
+        .from('simulados')
+        .update({
+          titulo: editSimulado.titulo,
+          video_resolucao: editSimulado.video_resolucao
+        })
+        .eq('id', isEditingSimulado)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      // Atualizar o simulado na lista local
+      setSimulados(simulados.map(simulado => 
+        simulado.id === isEditingSimulado 
+          ? { ...simulado, 
+              titulo: editSimulado.titulo, 
+              video_resolucao: editSimulado.video_resolucao 
+            } 
+          : simulado
+      ));
+
+      // Resetar os estados de edição
+      setIsEditingSimulado(null);
+      setIsModalEditSimuladoOpen(false);
+    } catch (error) {
+      console.error('Erro ao atualizar simulado:', error);
+      alert('Ocorreu um erro ao atualizar o simulado. Por favor, tente novamente.');
+    }
   };
 
   const handleSaveEditPasta = async (pastaId: number) => {
@@ -1626,12 +1683,20 @@ export default function Simulados() {
                 className="bg-gray-800 rounded-lg p-6 relative"
               >
                 {userType?.toLowerCase() === 'admin' && (
-                  <button
-                    onClick={() => handleDeleteSimulado(simulado.id)}
-                    className="absolute top-4 right-4 text-red-500 hover:text-red-600"
-                  >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
+                  <div className="absolute top-4 right-4 flex space-x-2">
+                    <button
+                      onClick={() => handleEditSimulado(simulado)}
+                      className="text-blue-500 hover:text-blue-600"
+                    >
+                      <PencilIcon className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSimulado(simulado.id)}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <TrashIcon className="h-5 w-5" />
+                    </button>
+                  </div>
                 )}
                 
                 <div className="flex flex-col space-y-4">
@@ -3003,6 +3068,58 @@ export default function Simulados() {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Edição de Simulado */}
+      {isModalEditSimuladoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-4 rounded-lg w-full max-w-lg mx-4">
+            <h2 className="text-xl font-semibold text-white mb-3">Editar Simulado</h2>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Título do Simulado
+                </label>
+                <input
+                  type="text"
+                  value={editSimulado.titulo}
+                  onChange={(e) => setEditSimulado({ ...editSimulado, titulo: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
+                  placeholder="Digite o título do simulado"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Link do Vídeo de Resolução
+                </label>
+                <input
+                  type="text"
+                  value={editSimulado.video_resolucao}
+                  onChange={(e) => setEditSimulado({ ...editSimulado, video_resolucao: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white text-sm"
+                  placeholder="Cole o ID do vídeo do Panda (ex: 952a06f4-df4e-421a-ae66-d8ed4d6491aa)"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 mt-4">
+              <button
+                onClick={() => setIsModalEditSimuladoOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEditSimulado}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center space-x-2"
+              >
+                <span>Salvar Alterações</span>
               </button>
             </div>
           </div>
