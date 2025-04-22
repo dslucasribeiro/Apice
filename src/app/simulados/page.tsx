@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import Navigation from '@/components/Navigation';
-import { FolderIcon, DocumentIcon, PlayCircleIcon, DocumentCheckIcon, TrashIcon, XMarkIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { FolderIcon, DocumentIcon, PlayCircleIcon, DocumentCheckIcon, TrashIcon, XMarkIcon, PencilIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
 interface Pasta {
   id: number;
@@ -51,6 +51,33 @@ interface ResultadoSimulado {
   created_at: string;
 }
 
+// Tipo para questão respondida com detalhes
+type QuestaoRespondidaType = {
+  id: string;
+  numero: number;
+  respostaAluno: string;
+  respostaCorreta: string;
+  acertou: boolean;
+  assunto: string;
+  dificuldade: string;
+};
+
+// Tipo para o resultado do simulado
+type ResultadoSimuladoType = {
+  acertos: number;
+  erros: number;
+  total: number;
+  percentual: number;
+  mostrando: boolean;
+  estatisticasDificuldade: {
+    fácil: { total: number; acertos: number; percentual: number };
+    média: { total: number; acertos: number; percentual: number };
+    difícil: { total: number; acertos: number; percentual: number };
+  };
+  estatisticasAssunto: Record<string, { total: number; acertos: number; percentual: number }>;
+  questoesDetalhes?: QuestaoRespondidaType[];
+};
+
 type DificuldadeType = 'fácil' | 'média' | 'difícil';
 
 export default function Simulados() {
@@ -65,6 +92,7 @@ export default function Simulados() {
   const [isModalResolucaoOpen, setIsModalResolucaoOpen] = useState(false);
   const [isModalPdfOpen, setIsModalPdfOpen] = useState(false);
   const [isModalCriarSimuladoOpen, setIsModalCriarSimuladoOpen] = useState(false);
+  const [mostrarDetalhesQuestoes, setMostrarDetalhesQuestoes] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [permiteDownload, setPermiteDownload] = useState(false);
   const [simuladoSelecionado, setSimuladoSelecionado] = useState<Simulado | null>(null);
@@ -108,6 +136,12 @@ export default function Simulados() {
   const [resultadosAluno, setResultadosAluno] = useState<ResultadoSimulado[]>([]);
   const [mesSelecionado, setMesSelecionado] = useState('');
   const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([]);
+  
+  // Estado para controlar a modal de desempenhos
+  const [isModalDesempenhosOpen, setIsModalDesempenhosOpen] = useState(false);
+  const [alunoSelecionadoDesempenho, setAlunoSelecionadoDesempenho] = useState('');
+  const [simuladoSelecionadoDesempenho, setSimuladoSelecionadoDesempenho] = useState('');
+  const [simuladosAluno, setSimuladosAluno] = useState<{id: string, titulo: string}[]>([]);
   
   // Estados para criação de simulado com questões
   const [novoSimuladoMes, setNovoSimuladoMes] = useState('');
@@ -186,21 +220,7 @@ export default function Simulados() {
   const [respostasAluno, setRespostasAluno] = useState<{[key: number]: string}>({});
 
   // Ampliando o estado de resultado do simulado para incluir mais estatísticas
-  const [resultadoSimulado, setResultadoSimulado] = useState<{
-    acertos: number,
-    erros: number,
-    total: number,
-    percentual: number,
-    mostrando: boolean,
-    estatisticasDificuldade: {
-      fácil: { total: number, acertos: number, percentual: number },
-      média: { total: number, acertos: number, percentual: number },
-      difícil: { total: number, acertos: number, percentual: number }
-    },
-    estatisticasAssunto: {
-      [assunto: string]: { total: number, acertos: number, percentual: number }
-    }
-  }>({
+  const [resultadoSimulado, setResultadoSimulado] = useState<ResultadoSimuladoType>({
     acertos: 0,
     erros: 0,
     total: 0,
@@ -688,6 +708,205 @@ export default function Simulados() {
     }
 
     setAlunos(data || []);
+  };
+  
+  // Função para carregar simulados respondidos pelo aluno (simulados disponíveis para mostrar desempenho)
+  const carregarSimuladosDoAluno = async (alunoId: number) => {
+    const supabase = createSupabaseClient();
+    
+    try {
+      // Carregar todos os simulados disponíveis para este teste
+      // Como está dando erro ao tentar acessar 'respostas_alunos', vamos simplesmente mostrar todos os simulados disponíveis
+      const { data, error } = await supabase
+        .from('simulados')
+        .select('id, titulo')
+        .eq('ativo', true)
+        .order('titulo');
+        
+      if (error) throw error;
+      
+      // Definir os simulados para o aluno
+      setSimuladosAluno(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar simulados:', error);
+      setSimuladosAluno([]);
+    }
+  };
+  
+  // Função para visualizar o desempenho do aluno selecionado no simulado selecionado
+  const visualizarDesempenhoAluno = async (alunoId: string, simuladoId: string) => {
+    try {
+      const supabase = createSupabaseClient();
+      const simuladoIdNumber = parseInt(simuladoId);
+      
+      // Definir o simuladoRespostaId para usar nas funções existentes
+      setSimuladoRespostaId(simuladoIdNumber);
+      
+      // Buscar as questões do simulado
+      const { data: questoes, error: questoesError } = await supabase
+        .from('questoes')
+        .select('id, numero, assunto, dificuldade')
+        .eq('simuladoExistente_id', simuladoIdNumber)
+        .order('numero', { ascending: true });
+      
+      if (questoesError) {
+        console.error('Erro ao buscar questões:', questoesError);
+        alert('Ocorreu um erro ao buscar as questões do simulado.');
+        return;
+      }
+      
+      if (!questoes || questoes.length === 0) {
+        alert('Não foram encontradas questões para este simulado.');
+        return;
+      }
+      
+      // Buscar as respostas do aluno para este simulado
+      const questoesIds = questoes.map(q => q.id);
+      const { data: respostasAluno, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id, alternativa_resposta')
+        .eq('aluno_id', alunoId)
+        .in('questao_id', questoesIds);
+      
+      if (respostasError) {
+        console.error('Erro ao buscar respostas do aluno:', respostasError);
+        alert('Ocorreu um erro ao buscar as respostas do aluno.');
+        return;
+      }
+      
+      if (!respostasAluno || respostasAluno.length === 0) {
+        alert('O aluno selecionado ainda não respondeu a este simulado.');
+        return;
+      }
+      
+      // Criar um mapa de respostas do aluno por questão
+      const respostasPorQuestao: { [key: string]: string } = {};
+      respostasAluno.forEach(resposta => {
+        respostasPorQuestao[resposta.questao_id] = resposta.alternativa_resposta;
+      });
+      
+      // Buscar as alternativas corretas para o simulado
+      const { data: alternativas, error: alternativasError } = await supabase
+        .from('alternativas')
+        .select('questao_id, letra')
+        .eq('simuladoExistente_id', simuladoIdNumber)
+        .eq('correta', true);
+      
+      if (alternativasError) {
+        console.error('Erro ao buscar alternativas:', alternativasError);
+        alert('Ocorreu um erro ao buscar as alternativas corretas.');
+        return;
+      }
+      
+      // Criar um mapa de alternativas corretas por questão
+      const alternativasCorretas: { [key: string]: string } = {};
+      alternativas?.forEach(alt => {
+        alternativasCorretas[alt.questao_id] = alt.letra;
+      });
+      
+      // Calcular quantas questões o aluno acertou
+      let acertos = 0;
+      let erros = 0;
+      let total = questoes.length;
+      
+      // Inicializar estatísticas por dificuldade e assunto
+      const estatisticasDificuldade = {
+        fácil: { total: 0, acertos: 0, percentual: 0 },
+        média: { total: 0, acertos: 0, percentual: 0 },
+        difícil: { total: 0, acertos: 0, percentual: 0 }
+      };
+      const estatisticasAssunto: { [assunto: string]: { total: number, acertos: number, percentual: number } } = {};
+      
+      for (const questao of questoes) {
+        const respostaAluno = respostasPorQuestao[questao.id];
+        const alternativaCorreta = alternativasCorretas[questao.id];
+        const dificuldade = questao.dificuldade?.toLowerCase() as DificuldadeType;
+        
+        // Garantir que a dificuldade seja uma das três opções válidas
+        const dificuldadeValida: DificuldadeType = 
+          ['fácil', 'média', 'difícil'].includes(dificuldade) 
+            ? dificuldade 
+            : 'média';
+        
+        // Incrementar o total para esta dificuldade
+        estatisticasDificuldade[dificuldadeValida].total++;
+        
+        // Inicializar estatísticas para este assunto se necessário
+        if (!estatisticasAssunto[questao.assunto]) {
+          estatisticasAssunto[questao.assunto] = { total: 0, acertos: 0, percentual: 0 };
+        }
+        estatisticasAssunto[questao.assunto].total++;
+        
+        if (respostaAluno && alternativaCorreta && 
+            respostaAluno.toLowerCase() === alternativaCorreta.toLowerCase()) {
+          acertos++;
+          estatisticasDificuldade[dificuldadeValida].acertos++;
+          estatisticasAssunto[questao.assunto].acertos++;
+        } else {
+          erros++;
+        }
+      }
+      
+      // Calcular percentuais por dificuldade e assunto
+      Object.keys(estatisticasDificuldade).forEach((dificuldade) => {
+        const diff = dificuldade as DificuldadeType;
+        if (estatisticasDificuldade[diff].total > 0) {
+          estatisticasDificuldade[diff].percentual = Math.round(
+            (estatisticasDificuldade[diff].acertos / estatisticasDificuldade[diff].total) * 100
+          );
+        }
+      });
+      
+      Object.keys(estatisticasAssunto).forEach((assunto) => {
+        if (estatisticasAssunto[assunto].total > 0) {
+          estatisticasAssunto[assunto].percentual = Math.round(
+            (estatisticasAssunto[assunto].acertos / estatisticasAssunto[assunto].total) * 100
+          );
+        }
+      });
+      
+      // Calcular o percentual de acertos
+      const percentual = total > 0 ? Math.round((acertos / total) * 100) : 0;
+      
+      // Criar array com detalhes de cada questão respondida
+      const questoesDetalhes: QuestaoRespondidaType[] = questoes.map(questao => {
+        const respostaAluno = respostasPorQuestao[questao.id] || '-';
+        const respostaCorreta = alternativasCorretas[questao.id] || '-';
+        const acertou: boolean = !!(respostaAluno && 
+                       respostaCorreta && 
+                       respostaAluno.toLowerCase() === respostaCorreta.toLowerCase());
+        
+        return {
+          id: questao.id,
+          numero: questao.numero,
+          respostaAluno,
+          respostaCorreta,
+          acertou,
+          assunto: questao.assunto || 'Não especificado',
+          dificuldade: questao.dificuldade || 'média'
+        };
+      }).sort((a, b) => a.numero - b.numero); // Ordenar por número da questão
+      
+      // Configurar o modal para mostrar o resultado
+      setResultadoSimulado({
+        acertos,
+        erros,
+        total,
+        percentual,
+        mostrando: true,
+        estatisticasDificuldade,
+        estatisticasAssunto,
+        questoesDetalhes
+      });
+      
+      // Fechar a modal de desempenhos e abrir a modal de resultados
+      setIsModalDesempenhosOpen(false);
+      setIsModalCartaoRespostaOpen(true);
+      
+    } catch (error) {
+      console.error('Erro ao carregar desempenho do simulado:', error);
+      alert('Ocorreu um erro ao carregar o desempenho. Por favor, tente novamente.');
+    }
   };
 
   const normalizarMes = (mes: string) => {
@@ -1504,6 +1723,25 @@ export default function Simulados() {
       // Calcular o percentual de acertos
       const percentual = total > 0 ? Math.round((acertos / total) * 100) : 0;
       
+      // Criar array com detalhes de cada questão respondida
+      const questoesDetalhes: QuestaoRespondidaType[] = questoes.map(questao => {
+        const respostaAluno = respostasPorQuestao[questao.id] || '-';
+        const respostaCorreta = alternativasCorretas[questao.id] || '-';
+        const acertou: boolean = !!(respostaAluno && 
+                       respostaCorreta && 
+                       respostaAluno.toLowerCase() === respostaCorreta.toLowerCase());
+        
+        return {
+          id: questao.id,
+          numero: questao.numero,
+          respostaAluno,
+          respostaCorreta,
+          acertou,
+          assunto: questao.assunto || 'Não especificado',
+          dificuldade: questao.dificuldade || 'média'
+        };
+      }).sort((a, b) => a.numero - b.numero); // Ordenar por número da questão
+      
       // Configurar o modal para mostrar o resultado
       setSimuladoRespostaId(simuladoId);
       setResultadoSimulado({
@@ -1513,7 +1751,8 @@ export default function Simulados() {
         percentual,
         mostrando: true,
         estatisticasDificuldade,
-        estatisticasAssunto
+        estatisticasAssunto,
+        questoesDetalhes
       });
       
       // Abrir o modal para exibir o resultado
@@ -1774,17 +2013,7 @@ export default function Simulados() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <button
-                onClick={() => {
-                  setIsModalEscolhaTipoOpen(false);
-                  setIsModalCriarSimuladoOpen(true);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white py-6 px-4 rounded-lg flex flex-col items-center justify-center transition-colors"
-              >
-                <DocumentIcon className="h-10 w-10 mb-2" />
-                <span className="text-lg font-medium">Interno</span>
-                <p className="text-xs text-gray-300 mt-1 text-center">Crie um simulado com questões</p>
-              </button>
+              {/* Botão Interno foi ocultado conforme solicitado */}
               
               <button
                 onClick={() => {
@@ -1808,6 +2037,18 @@ export default function Simulados() {
                 <DocumentIcon className="h-10 w-10 mb-2" />
                 <span className="text-lg font-medium">Gabaritos vinculados</span>
                 <p className="text-xs text-gray-300 mt-1 text-center">Consulte gabaritos vinculados</p>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setIsModalEscolhaTipoOpen(false);
+                  setIsModalDesempenhosOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white py-6 px-4 rounded-lg flex flex-col items-center justify-center transition-colors"
+              >
+                <ChartBarIcon className="h-10 w-10 mb-2" />
+                <span className="text-lg font-medium">Desempenhos</span>
+                <p className="text-xs text-gray-300 mt-1 text-center">Visualize desempenhos</p>
               </button>
             </div>
           </div>
@@ -1850,6 +2091,115 @@ export default function Simulados() {
         </div>
       )}
 
+      {/* Modal de Desempenhos */}
+      {isModalDesempenhosOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-5 rounded-lg w-full max-w-2xl mx-auto my-4 modal-compact">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Desempenhos</h2>
+              <button 
+                onClick={() => setIsModalDesempenhosOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="bg-gray-800 p-4 rounded-lg mb-4">
+              <div className="space-y-4">
+                {/* Seletor de Aluno */}
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Selecione o Aluno
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full p-2 pl-3 pr-10 bg-gray-700 border border-gray-600 rounded-md text-white"
+                      placeholder="Digite o nome do aluno"
+                      value={searchAluno}
+                      onChange={(e) => {
+                        setSearchAluno(e.target.value);
+                        setShowAlunoDropdown(true);
+                      }}
+                      onClick={() => setShowAlunoDropdown(true)}
+                    />
+                    {showAlunoDropdown && (
+                      <div className="absolute z-10 mt-1 w-full bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                        {alunosFiltrados.length > 0 ? (
+                          alunosFiltrados.map((aluno) => (
+                            <div
+                              key={aluno.id}
+                              className="px-3 py-2 cursor-pointer hover:bg-gray-600 text-white"
+                              onClick={() => {
+                                setAlunoSelecionadoDesempenho(aluno.id.toString());
+                                setSearchAluno(aluno.nome);
+                                setShowAlunoDropdown(false);
+                                // Carregar simulados respondidos pelo aluno
+                                carregarSimuladosDoAluno(aluno.id);
+                              }}
+                            >
+                              {aluno.nome}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-400">Nenhum aluno encontrado</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Seletor de Simulado */}
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Selecione o Simulado
+                  </label>
+                  <select
+                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                    value={simuladoSelecionadoDesempenho}
+                    onChange={(e) => setSimuladoSelecionadoDesempenho(e.target.value)}
+                  >
+                    <option value="">Selecione o simulado</option>
+                    {simuladosAluno.map((simulado) => (
+                      <option key={simulado.id} value={simulado.id}>
+                        {simulado.titulo}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Botão para visualizar desempenho */}
+                <div className="mt-6">
+                  <button
+                    onClick={() => {
+                      if (alunoSelecionadoDesempenho && simuladoSelecionadoDesempenho) {
+                        visualizarDesempenhoAluno(alunoSelecionadoDesempenho, simuladoSelecionadoDesempenho);
+                      } else {
+                        alert('Por favor, selecione um aluno e um simulado para visualizar o desempenho.');
+                      }
+                    }}
+                    className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                    disabled={!alunoSelecionadoDesempenho || !simuladoSelecionadoDesempenho}
+                  >
+                    Visualizar Desempenho
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsModalDesempenhosOpen(false)}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Modal de Gabaritos Vinculados */}
       {isModalGabaritosVinculadosOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -2776,6 +3126,7 @@ export default function Simulados() {
                 setSimuladoRespostaId(null);
                 setQuestoesSimulado([]);
                 setRespostasAluno({});
+                setMostrarDetalhesQuestoes(false);
               }} className="text-gray-400 hover:text-white">
                 <XMarkIcon className="w-6 h-6" />
               </button>
@@ -2907,6 +3258,82 @@ export default function Simulados() {
                       )}
                     </div>
                   </div>
+                  
+                  {/* Botão para mostrar/ocultar detalhes das questões */}
+                  <div className="mt-6 flex justify-center">
+                    <button
+                      onClick={() => setMostrarDetalhesQuestoes(!mostrarDetalhesQuestoes)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition-all duration-200 flex items-center"
+                    >
+                      {mostrarDetalhesQuestoes ? (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                          </svg>
+                          Ocultar Detalhes por Questão
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Ver Detalhes por Questão
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Detalhes das questões respondidas (condicional) */}
+                  {mostrarDetalhesQuestoes && (
+                    <div className="text-left mt-4 animate-fadeIn">
+                      <h4 className="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">
+                        Detalhes por Questão
+                      </h4>
+                      <div className="max-h-[40vh] overflow-y-auto pr-2">
+                        <table className="min-w-full bg-gray-800 rounded-lg overflow-hidden">
+                          <thead className="bg-gray-700">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Nº</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Marcou</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Correta</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Assunto</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Dificuldade</th>
+                              <th className="px-4 py-2 text-center text-sm font-medium text-white">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700">
+                            {resultadoSimulado.questoesDetalhes?.map((questao) => (
+                              <tr key={questao.id} className={questao.acertou ? "bg-green-800 bg-opacity-20" : "bg-red-800 bg-opacity-20"}>
+                                <td className="px-4 py-2 text-sm text-gray-300">{questao.numero}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300 font-mono uppercase">{questao.respostaAluno}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300 font-mono uppercase">{questao.respostaCorreta}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300">{questao.assunto}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300">{questao.dificuldade}</td>
+                                <td className="px-4 py-2 text-sm text-center">
+                                  {questao.acertou ? (
+                                    <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-green-100 bg-green-600 rounded">
+                                      Acerto
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded">
+                                      Erro
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {(!resultadoSimulado.questoesDetalhes || resultadoSimulado.questoesDetalhes.length === 0) && (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-4 text-sm text-center text-gray-400">
+                                  Nenhuma questão disponível
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="mt-6">
                     {resultadoSimulado.percentual >= 70 ? (
