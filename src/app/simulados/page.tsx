@@ -51,6 +51,33 @@ interface ResultadoSimulado {
   created_at: string;
 }
 
+// Tipo para questão respondida com detalhes
+type QuestaoRespondidaType = {
+  id: string;
+  numero: number;
+  respostaAluno: string;
+  respostaCorreta: string;
+  acertou: boolean;
+  assunto: string;
+  dificuldade: string;
+};
+
+// Tipo para o resultado do simulado
+type ResultadoSimuladoType = {
+  acertos: number;
+  erros: number;
+  total: number;
+  percentual: number;
+  mostrando: boolean;
+  estatisticasDificuldade: {
+    fácil: { total: number; acertos: number; percentual: number };
+    média: { total: number; acertos: number; percentual: number };
+    difícil: { total: number; acertos: number; percentual: number };
+  };
+  estatisticasAssunto: Record<string, { total: number; acertos: number; percentual: number }>;
+  questoesDetalhes?: QuestaoRespondidaType[];
+};
+
 type DificuldadeType = 'fácil' | 'média' | 'difícil';
 
 export default function Simulados() {
@@ -65,6 +92,7 @@ export default function Simulados() {
   const [isModalResolucaoOpen, setIsModalResolucaoOpen] = useState(false);
   const [isModalPdfOpen, setIsModalPdfOpen] = useState(false);
   const [isModalCriarSimuladoOpen, setIsModalCriarSimuladoOpen] = useState(false);
+  const [mostrarDetalhesQuestoes, setMostrarDetalhesQuestoes] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [permiteDownload, setPermiteDownload] = useState(false);
   const [simuladoSelecionado, setSimuladoSelecionado] = useState<Simulado | null>(null);
@@ -192,21 +220,7 @@ export default function Simulados() {
   const [respostasAluno, setRespostasAluno] = useState<{[key: number]: string}>({});
 
   // Ampliando o estado de resultado do simulado para incluir mais estatísticas
-  const [resultadoSimulado, setResultadoSimulado] = useState<{
-    acertos: number,
-    erros: number,
-    total: number,
-    percentual: number,
-    mostrando: boolean,
-    estatisticasDificuldade: {
-      fácil: { total: number, acertos: number, percentual: number },
-      média: { total: number, acertos: number, percentual: number },
-      difícil: { total: number, acertos: number, percentual: number }
-    },
-    estatisticasAssunto: {
-      [assunto: string]: { total: number, acertos: number, percentual: number }
-    }
-  }>({
+  const [resultadoSimulado, setResultadoSimulado] = useState<ResultadoSimuladoType>({
     acertos: 0,
     erros: 0,
     total: 0,
@@ -854,6 +868,25 @@ export default function Simulados() {
       // Calcular o percentual de acertos
       const percentual = total > 0 ? Math.round((acertos / total) * 100) : 0;
       
+      // Criar array com detalhes de cada questão respondida
+      const questoesDetalhes: QuestaoRespondidaType[] = questoes.map(questao => {
+        const respostaAluno = respostasPorQuestao[questao.id] || '-';
+        const respostaCorreta = alternativasCorretas[questao.id] || '-';
+        const acertou: boolean = !!(respostaAluno && 
+                       respostaCorreta && 
+                       respostaAluno.toLowerCase() === respostaCorreta.toLowerCase());
+        
+        return {
+          id: questao.id,
+          numero: questao.numero,
+          respostaAluno,
+          respostaCorreta,
+          acertou,
+          assunto: questao.assunto || 'Não especificado',
+          dificuldade: questao.dificuldade || 'média'
+        };
+      }).sort((a, b) => a.numero - b.numero); // Ordenar por número da questão
+      
       // Configurar o modal para mostrar o resultado
       setResultadoSimulado({
         acertos,
@@ -862,7 +895,8 @@ export default function Simulados() {
         percentual,
         mostrando: true,
         estatisticasDificuldade,
-        estatisticasAssunto
+        estatisticasAssunto,
+        questoesDetalhes
       });
       
       // Fechar a modal de desempenhos e abrir a modal de resultados
@@ -1689,6 +1723,25 @@ export default function Simulados() {
       // Calcular o percentual de acertos
       const percentual = total > 0 ? Math.round((acertos / total) * 100) : 0;
       
+      // Criar array com detalhes de cada questão respondida
+      const questoesDetalhes: QuestaoRespondidaType[] = questoes.map(questao => {
+        const respostaAluno = respostasPorQuestao[questao.id] || '-';
+        const respostaCorreta = alternativasCorretas[questao.id] || '-';
+        const acertou: boolean = !!(respostaAluno && 
+                       respostaCorreta && 
+                       respostaAluno.toLowerCase() === respostaCorreta.toLowerCase());
+        
+        return {
+          id: questao.id,
+          numero: questao.numero,
+          respostaAluno,
+          respostaCorreta,
+          acertou,
+          assunto: questao.assunto || 'Não especificado',
+          dificuldade: questao.dificuldade || 'média'
+        };
+      }).sort((a, b) => a.numero - b.numero); // Ordenar por número da questão
+      
       // Configurar o modal para mostrar o resultado
       setSimuladoRespostaId(simuladoId);
       setResultadoSimulado({
@@ -1698,7 +1751,8 @@ export default function Simulados() {
         percentual,
         mostrando: true,
         estatisticasDificuldade,
-        estatisticasAssunto
+        estatisticasAssunto,
+        questoesDetalhes
       });
       
       // Abrir o modal para exibir o resultado
@@ -3072,6 +3126,7 @@ export default function Simulados() {
                 setSimuladoRespostaId(null);
                 setQuestoesSimulado([]);
                 setRespostasAluno({});
+                setMostrarDetalhesQuestoes(false);
               }} className="text-gray-400 hover:text-white">
                 <XMarkIcon className="w-6 h-6" />
               </button>
@@ -3203,6 +3258,82 @@ export default function Simulados() {
                       )}
                     </div>
                   </div>
+                  
+                  {/* Botão para mostrar/ocultar detalhes das questões */}
+                  <div className="mt-6 flex justify-center">
+                    <button
+                      onClick={() => setMostrarDetalhesQuestoes(!mostrarDetalhesQuestoes)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition-all duration-200 flex items-center"
+                    >
+                      {mostrarDetalhesQuestoes ? (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                          </svg>
+                          Ocultar Detalhes por Questão
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Ver Detalhes por Questão
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Detalhes das questões respondidas (condicional) */}
+                  {mostrarDetalhesQuestoes && (
+                    <div className="text-left mt-4 animate-fadeIn">
+                      <h4 className="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">
+                        Detalhes por Questão
+                      </h4>
+                      <div className="max-h-[40vh] overflow-y-auto pr-2">
+                        <table className="min-w-full bg-gray-800 rounded-lg overflow-hidden">
+                          <thead className="bg-gray-700">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Nº</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Marcou</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Correta</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Assunto</th>
+                              <th className="px-4 py-2 text-left text-sm font-medium text-white">Dificuldade</th>
+                              <th className="px-4 py-2 text-center text-sm font-medium text-white">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700">
+                            {resultadoSimulado.questoesDetalhes?.map((questao) => (
+                              <tr key={questao.id} className={questao.acertou ? "bg-green-800 bg-opacity-20" : "bg-red-800 bg-opacity-20"}>
+                                <td className="px-4 py-2 text-sm text-gray-300">{questao.numero}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300 font-mono uppercase">{questao.respostaAluno}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300 font-mono uppercase">{questao.respostaCorreta}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300">{questao.assunto}</td>
+                                <td className="px-4 py-2 text-sm text-gray-300">{questao.dificuldade}</td>
+                                <td className="px-4 py-2 text-sm text-center">
+                                  {questao.acertou ? (
+                                    <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-green-100 bg-green-600 rounded">
+                                      Acerto
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded">
+                                      Erro
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {(!resultadoSimulado.questoesDetalhes || resultadoSimulado.questoesDetalhes.length === 0) && (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-4 text-sm text-center text-gray-400">
+                                  Nenhuma questão disponível
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="mt-6">
                     {resultadoSimulado.percentual >= 70 ? (
