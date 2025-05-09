@@ -483,9 +483,19 @@ export default function Materiais() {
         .createSignedUrl(material.url, 3600); // URL válida por 1 hora
 
       if (data) {
-        setSelectedUrl(data.signedUrl);
-        setPermiteDownload(material.download_permitido);
-        setIsModalPdfOpen(true);
+        // Detecta se é um dispositivo móvel
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+          // Em dispositivos móveis, abrir o PDF diretamente no navegador
+          // isso permite usar todas as funcionalidades nativas de visualização de PDF do dispositivo
+          window.open(data.signedUrl, '_blank');
+        } else {
+          // Em desktop, manter o comportamento do modal
+          setSelectedUrl(data.signedUrl);
+          setPermiteDownload(material.download_permitido);
+          setIsModalPdfOpen(true);
+        }
       }
     } catch (error) {
       console.error('Erro ao abrir material:', error);
