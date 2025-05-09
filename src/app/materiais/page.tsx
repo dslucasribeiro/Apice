@@ -7,12 +7,9 @@ import { FolderIcon } from '@heroicons/react/24/outline';
 import { XMarkIcon, TrashIcon, DocumentIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 
 // Componente para visualização de PDFs com suporte melhorado para dispositivos móveis
-const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
+const PdfViewer = ({ url, onClose, permiteDownload = false }: { url: string; onClose: () => void; permiteDownload?: boolean }) => {
   // Detecta se o dispositivo é mobile usando window.innerWidth
   const [isMobile, setIsMobile] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  // Definimos um valor arbitrário alto para permitir navegação sem conhecer o número real de páginas
-  const [totalPages] = useState(100);
   // Estado para controlar se o PDF está carregando
   const [isLoading, setIsLoading] = useState(true);
   
@@ -32,28 +29,13 @@ const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  // Função para navegar para a próxima página
-  const nextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
+  // Para desktop, mantenha a URL atual com toolbar=0
+  // Para mobile, não use parâmetros especiais para permitir navegador nativo
+  const pdfUrl = isMobile ? url : `${url}#toolbar=0`;
   
-  // Função para navegar para a página anterior
-  const prevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-  
-  // URL do PDF com modificações para dispositivos móveis
-  const pdfUrl = isMobile 
-    ? `${url}#page=${currentPage}&view=FitH,top&toolbar=0&navpanes=0` 
-    : `${url}#toolbar=0`;
-  
-  // Função para download do PDF
-  const handleDownload = () => {
-    window.open(url, '_blank');
+  // Função para fazer o download do PDF
+  const handleDownload = (downloadUrl: string) => {
+    window.open(downloadUrl, '_blank');
   };
   
   return (
@@ -62,7 +44,14 @@ const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
         <div className="flex justify-between items-center p-4 border-b">
           <h2 className="text-lg font-semibold">Visualizador de PDF</h2>
           <div className="flex space-x-2">
-            {/* O botão de download é gerenciado pelo componente pai */}
+            {permiteDownload && (
+              <button
+                onClick={() => handleDownload(url)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+              >
+                Download
+              </button>
+            )}
             <button
               onClick={onClose}
               className="text-gray-500 hover:text-gray-700"
@@ -93,36 +82,7 @@ const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
             onLoad={() => setIsLoading(false)}
           />
           
-          {/* Navegador de páginas somente em dispositivos móveis */}
-          {isMobile && (
-            <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center space-x-4 bg-gray-800 bg-opacity-70 py-2 rounded-full mx-auto w-48">
-              <button 
-                onClick={prevPage}
-                disabled={currentPage <= 1}
-                className="text-white p-1 rounded-full disabled:opacity-50"
-                aria-label="Página anterior"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              
-              <span className="text-white text-sm">
-                {currentPage} / {totalPages}
-              </span>
-              
-              <button 
-                onClick={nextPage}
-                disabled={currentPage >= totalPages}
-                className="text-white p-1 rounded-full disabled:opacity-50"
-                aria-label="Próxima página"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          )}
+          {/* Para dispositivos móveis, deixamos o visualizador nativo do PDF cuidar da navegação */}
         </div>
       </div>
     </div>
