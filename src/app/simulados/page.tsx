@@ -1393,7 +1393,7 @@ export default function Simulados() {
       
       const { data: userData } = await supabase
         .from('usuarios')
-        .select('id')
+        .select('id, nome, email')
         .eq('user_id', user.id)
         .single();
 
@@ -1503,6 +1503,61 @@ export default function Simulados() {
       
       // Calcular o percentual de acertos
       const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
+      
+      // Obter informações do simulado para o webhook
+      let simuladoTitulo = '';
+      if (simuladoRespostaId) {
+        const { data: simuladoData } = await supabase
+          .from('simulados')
+          .select('titulo')
+          .eq('id', simuladoRespostaId)
+          .single();
+          
+        if (simuladoData) {
+          simuladoTitulo = simuladoData.titulo;
+        }
+      }
+      
+      // Disparar o webhook para o n8n com os dados das respostas
+      try {
+        const webhookUrl = 'https://primary-production-ef06a.up.railway.app/webhook-test/a8480b53-6418-4026-a988-1119f4720de3';
+        const webhookData = {
+          aluno: {
+            id: alunoId,
+            nome: userData.nome,
+            email: userData.email
+          },
+          simulado: {
+            id: simuladoRespostaId,
+            titulo: simuladoTitulo
+          },
+          resultado: {
+            acertos,
+            erros,
+            totalQuestoes,
+            percentual
+          },
+          dataEnvio: new Date().toISOString(),
+          respostas: respostasAluno
+        };
+        
+        const webhookResponse = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookData),
+        });
+        
+        if (!webhookResponse.ok) {
+          console.error('Erro ao enviar dados para o webhook:', await webhookResponse.text());
+        } else {
+          console.log('Webhook disparado com sucesso');
+        }
+      } catch (webhookError) {
+        console.error('Erro ao disparar webhook:', webhookError);
+        // Não interromper o fluxo principal se o webhook falhar
+      }
       
       // Em vez de atualizar parcialmente o resultado, carregar o desempenho completo do simulado
       if (simuladoRespostaId) {
