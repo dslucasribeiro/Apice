@@ -9,6 +9,7 @@ import { XMarkIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
 interface UserCardProps {
   user: UserProfile;
+  alunosComRespostas: number[];
 }
 
 interface UserProfile {
@@ -90,6 +91,7 @@ export default function Perfil() {
   const [simuladoSelecionadoDesempenho, setSimuladoSelecionadoDesempenho] = useState('');
   const [simuladosAluno, setSimuladosAluno] = useState<{id: string, titulo: string}[]>([]);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [alunosComRespostas, setAlunosComRespostas] = useState<number[]>([]);
   
   // Estados para o modal de resultados
   const [isModalCartaoRespostaOpen, setIsModalCartaoRespostaOpen] = useState(false);
@@ -114,6 +116,7 @@ export default function Perfil() {
   useEffect(() => {
     fetchUsers();
     carregarAlunos();
+    verificarAlunosComRespostas();
   }, [currentPage]); // Refetch quando a página mudar
 
   const fetchUsers = async () => {
@@ -382,22 +385,74 @@ export default function Perfil() {
     setAlunos(data || []);
   };
   
+  // Função para verificar quais alunos têm respostas em simulados
+  const verificarAlunosComRespostas = async () => {
+    try {
+      const supabase = createSupabaseClient();
+      
+      // Buscar alunos distintos que têm respostas registradas
+      const { data, error } = await supabase
+        .from('respostas_alunos')
+        .select('aluno_id')
+        .order('aluno_id');
+        
+      if (error) throw error;
+      
+      // Extrair IDs únicos usando Array.from para evitar problemas com o spread em Sets
+      const uniqueIds = data?.map(item => item.aluno_id) || [];
+      const idsUnicos = Array.from(new Set(uniqueIds));
+      setAlunosComRespostas(idsUnicos);
+    } catch (error) {
+      console.error('Erro ao verificar alunos com respostas:', error);
+    }
+  };
+  
   // Função para carregar simulados respondidos pelo aluno
   const carregarSimuladosDoAluno = async (alunoId: number) => {
     const supabase = createSupabaseClient();
     
     try {
-      // Carregar todos os simulados disponíveis para este aluno
-      const { data, error } = await supabase
+      // Buscar as respostas distintas do aluno para saber quais simulados ele respondeu
+      const { data: respostas, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id')
+        .eq('aluno_id', alunoId);
+        
+      if (respostasError) throw respostasError;
+      
+      if (!respostas || respostas.length === 0) {
+        setSimuladosAluno([]);
+        return;
+      }
+      
+      // Buscar as questões associadas às respostas para obter os IDs dos simulados
+      const questoesIds = respostas.map(r => r.questao_id);
+      const { data: questoes, error: questoesError } = await supabase
+        .from('questoes')
+        .select('simuladoExistente_id')
+        .in('id', questoesIds);
+        
+      if (questoesError) throw questoesError;
+      
+      // Extrair IDs únicos de simulados
+      const simuladosIds = Array.from(new Set(questoes?.map(q => q.simuladoExistente_id) || []));
+      
+      if (simuladosIds.length === 0) {
+        setSimuladosAluno([]);
+        return;
+      }
+      
+      // Buscar os detalhes dos simulados que o aluno respondeu
+      const { data: simulados, error: simuladosError } = await supabase
         .from('simulados')
         .select('id, titulo')
-        .eq('ativo', true)
+        .in('id', simuladosIds)
         .order('titulo');
         
-      if (error) throw error;
+      if (simuladosError) throw simuladosError;
       
       // Definir os simulados para o aluno
-      setSimuladosAluno(data || []);
+      setSimuladosAluno(simulados || []);
     } catch (error) {
       console.error('Erro ao carregar simulados:', error);
       setSimuladosAluno([]);
@@ -647,7 +702,7 @@ export default function Perfil() {
     };
   }, [editingUser?.previewUrl]);
 
-  const UserCard = ({ user }: UserCardProps) => (
+  const UserCard = ({ user, alunosComRespostas }: UserCardProps) => (
     <div className="mt-8 flex justify-center px-4">
       <div className="relative bg-gradient-to-br from-blue-900 to-gray-900 rounded-xl shadow-2xl p-8 w-full max-w-5xl mx-auto overflow-hidden">
         {/* Efeito de brilho */}
@@ -734,7 +789,7 @@ export default function Perfil() {
                     Alterar Senha
                   </button>
                   
-                  {userType === 'Admin' && (
+                  {userType === 'Admin' && alunosComRespostas.includes(user.id) && (
                     <button
                       onClick={() => handleDesempenhoModalOpen(user)}
                       className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
@@ -1004,9 +1059,9 @@ export default function Perfil() {
             )}
           </div>
           
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {users.map((user) => (
-              <UserCard key={user.id} user={user} />
+              <UserCard key={user.id} user={user} alunosComRespostas={alunosComRespostas} />
             ))}
           </div>
 
