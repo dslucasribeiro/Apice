@@ -67,6 +67,10 @@ interface Aluno {
 
 export default function Perfil() {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userType, setUserType] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -160,12 +164,57 @@ export default function Perfil() {
         setTotalPages(Math.ceil(count / itemsPerPage));
       }
       
-      setUsers(data || []);
-    } catch (error: any) {
-      console.error('Error fetching users:', error.message);
+      const usersData = data || [];
+      setUsers(usersData);
+      setFilteredUsers(usersData);
+    } catch (error) {
+      console.error('Erro ao buscar usuários:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Buscar todos os usuários que correspondem ao termo de busca
+  const searchAllUsers = async (term: string) => {
+    if (!term.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+    
+    setIsSearching(true);
+    const supabase = createSupabaseClient();
+    
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .ilike('nome', `%${term}%`)
+        .order('nome');
+        
+      if (error) throw error;
+      
+      setSearchResults(data || []);
+    } catch (error) {
+      console.error('Erro ao buscar usuários:', error);
+      setSearchResults([]);
+    }
+  };
+
+  // Função para buscar em tempo real enquanto o usuário digita
+  const handleSearch = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const term = event.target.value;
+    setSearchTerm(term);
+    
+    // Se o campo estiver vazio, volta para o modo de paginação
+    if (!term.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+    
+    // Realiza a busca em tempo real
+    searchAllUsers(term);
   };
 
   useEffect(() => {
@@ -714,18 +763,29 @@ export default function Perfil() {
             <h2 className="text-2xl font-bold text-white">Identificação Acadêmica</h2>
             <div className="flex items-center gap-4">
               <span className={`px-3 py-1 rounded-full text-sm font-semibold text-white ${getStatusColor(user.status)}`}>
-                {user.status || 'Indefinido'}
+                {user.status || 'Ativo'}
               </span>
-              {userType === 'Admin' && (
-                <button 
-                  className="text-blue-400 hover:text-blue-300 transition-colors"
-                  onClick={() => handleEdit(user)}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                  </svg>
-                </button>
-              )}
+              <div className="flex space-x-3">
+                {userType === 'Admin' && alunosComRespostas.includes(Number(user.id)) && (
+                  <button
+                    onClick={() => handleDesempenhoModalOpen(user)}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-1 text-sm"
+                  >
+                    <ChartBarIcon className="h-4 w-4" />
+                    Desempenho
+                  </button>
+                )}
+                {userType === 'Admin' && (
+                  <button 
+                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                    onClick={() => handleEdit(user)}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-6 h-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -780,25 +840,13 @@ export default function Perfil() {
               <div className="text-sm text-gray-300">
                 <p className="text-blue-400 mb-2">Contato</p>
                 <p className="mb-1">{formatPhone(user.celular)}</p>
-                <p className="break-all">{user.email || 'Email não informado'}</p>
-                <div className="flex flex-col space-y-2 mt-4">
-                  <button
-                    onClick={() => handlePasswordModalOpen(user)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                  >
-                    Alterar Senha
-                  </button>
-                  
-                  {userType === 'Admin' && alunosComRespostas.includes(user.id) && (
-                    <button
-                      onClick={() => handleDesempenhoModalOpen(user)}
-                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <ChartBarIcon className="h-5 w-5" />
-                      Ver Desempenho
-                    </button>
-                  )}
-                </div>
+                <p className="break-all mb-4">{user.email || 'Email não informado'}</p>
+                <button
+                  onClick={() => handlePasswordModalOpen(user)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  Alterar Senha
+                </button>
               </div>
 
               {/* QR Code decorativo */}
@@ -954,7 +1002,7 @@ export default function Perfil() {
               
               <div className="mb-6">
                 <h3 className="text-white text-lg font-semibold mb-3">Desempenho por Assunto</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {Object.entries(resultadoSimulado.estatisticasAssunto).map(([assunto, stats], index) => {
                     if (stats.total === 0) return null;
                     
@@ -1049,24 +1097,70 @@ export default function Perfil() {
     <div className="min-h-screen bg-gray-900">
       <Navigation />
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
+        <div className="max-w-6xl mx-auto space-y-4 mb-6">
+          <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-white">Identificação</h1>
             {userType === 'Admin' && (
               <div className="text-gray-400 text-sm">
-                Total de registros: {users.length}
+                Total de registros: {filteredUsers.length}
               </div>
             )}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {users.map((user) => (
-              <UserCard key={user.id} user={user} alunosComRespostas={alunosComRespostas} />
-            ))}
-          </div>
-
-          {/* Paginação - Visível apenas para admin e quando houver mais de uma página */}
-          {userType === 'Admin' && totalPages > 1 && (
+          {/* Campo de busca - visível apenas para administradores */}
+          {userType === 'Admin' && (
+            <div className="relative mb-6">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <svg className="w-4 h-4 text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z" />
+                </svg>
+              </div>
+              <input
+                type="search"
+                className="block w-full p-2.5 pl-10 text-sm bg-gray-700 border border-gray-600 placeholder-gray-400 text-white rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Buscar alunos por nome..."
+                value={searchTerm}
+                onChange={handleSearch}
+              />
+              {isSearching && searchResults.length === 0 && searchTerm.trim() !== '' && (
+                <p className="mt-2 text-sm text-gray-400">Nenhum aluno encontrado com esse nome.</p>
+              )}
+            </div>
+          )}
+          
+          {/* Resultados da busca (mostrados quando uma busca for executada) */}
+          {isSearching && searchResults.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-white mb-4">Resultados da busca</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {searchResults.map((user) => (
+                  <UserCard key={user.id} user={user} alunosComRespostas={alunosComRespostas} />
+                ))}
+              </div>
+              <button 
+                className="mt-6 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+                onClick={() => {
+                  setIsSearching(false);
+                  setSearchTerm('');
+                  setSearchResults([]);
+                }}
+              >
+                Voltar para a lista completa
+              </button>
+            </div>
+          )}
+          
+          {/* Grid de usuários (mostrada quando não houver busca) */}
+          {!isSearching && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {filteredUsers.map((user) => (
+                <UserCard key={user.id} user={user} alunosComRespostas={alunosComRespostas} />
+              ))}
+            </div>
+          )}
+          
+          {/* Paginação - Visível apenas para admin, quando houver mais de uma página e não estiver em modo de busca */}
+          {userType === 'Admin' && totalPages > 1 && !isSearching && (
             <div className="mt-8 flex justify-center items-center space-x-4">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
@@ -1183,7 +1277,7 @@ export default function Perfil() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                 >
                   Salvar
                 </button>
