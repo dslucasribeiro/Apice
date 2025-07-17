@@ -766,15 +766,7 @@ export default function Perfil() {
                 {user.status || 'Ativo'}
               </span>
               <div className="flex space-x-3">
-                {userType === 'Admin' && alunosComRespostas.includes(Number(user.id)) && (
-                  <button
-                    onClick={() => handleDesempenhoModalOpen(user)}
-                    className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-1 text-sm"
-                  >
-                    <ChartBarIcon className="h-4 w-4" />
-                    Desempenho
-                  </button>
-                )}
+                {/* Botão Desempenho movido para a seção de Contato */}
                 {userType === 'Admin' && (
                   <button 
                     className="text-blue-400 hover:text-blue-300 transition-colors"
@@ -841,12 +833,24 @@ export default function Perfil() {
                 <p className="text-blue-400 mb-2">Contato</p>
                 <p className="mb-1">{formatPhone(user.celular)}</p>
                 <p className="break-all mb-4">{user.email || 'Email não informado'}</p>
-                <button
-                  onClick={() => handlePasswordModalOpen(user)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                >
-                  Alterar Senha
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handlePasswordModalOpen(user)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  >
+                    Alterar Senha
+                  </button>
+                  
+                  {userType === 'Admin' && alunosComRespostas.includes(Number(user.id)) && (
+                    <button
+                      onClick={() => handleDesempenhoModalOpen(user)}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-1"
+                    >
+                      <ChartBarIcon className="h-4 w-4" />
+                      Desempenho
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* QR Code decorativo */}
