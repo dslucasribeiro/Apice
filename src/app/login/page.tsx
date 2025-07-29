@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useUser } from '@/hooks/useUser';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -12,6 +13,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createSupabaseClient();
+  const { user, loading: userLoading, error: userError } = useUser();
+  
+  // Verificar se há erros de acesso (usuário inativo)
+  useEffect(() => {
+    if (userError) {
+      setError(userError);
+    }
+  }, [userError]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,6 +35,10 @@ export default function Login() {
       });
 
       if (error) throw error;
+      
+      // Espere um pouco para o hook useUser processar a autenticação
+      // Isso garante que a verificação de status será realizada
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // console.log('Login bem sucedido, dados do auth:', data);
 
@@ -39,13 +52,28 @@ export default function Login() {
 
         if (userError) {
           // console.error('Erro ao buscar dados do usuário:', userError);
+          setError('Erro ao buscar dados do usuário');
         } else {
-          // console.log('Dados do usuário na tabela usuarios:', userData);
-          // Redirecionar alunos para Identificação Acadêmica
-          if (userData.tipo === 'Aluno') {
-            router.push('/perfil');
+          // Verificar se o usuário está inativo
+          const { data: statusData, error: statusError } = await supabase
+            .from('usuarios')
+            .select('status')
+            .eq('user_id', data.user.id)
+            .single();
+
+          if (statusError) {
+            setError('Erro ao verificar status do usuário');
+          } else if (statusData.status === 'inativo') {
+            // Forçar logout se usuário estiver inativo
+            await supabase.auth.signOut();
+            setError('Acesso negado. Sua conta está inativa.');
           } else {
-            router.push('/');
+            // Redirecionar alunos para Identificação Acadêmica
+            if (userData.tipo === 'Aluno') {
+              router.push('/perfil');
+            } else {
+              router.push('/');
+            }
           }
         }
       }
