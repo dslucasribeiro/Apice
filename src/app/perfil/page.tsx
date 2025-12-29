@@ -65,6 +65,15 @@ interface Aluno {
   nome: string;
 }
 
+// Tipo para o resumo de desempenho na carteirinha
+interface ResumoDesempenho {
+  totalSimulados: number;
+  totalQuestoes: number;
+  totalAcertos: number;
+  percentualGeral: number;
+  carregando: boolean;
+}
+
 export default function Perfil() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
@@ -117,11 +126,32 @@ export default function Perfil() {
     estatisticasAssunto: {}
   });
 
+  // Estado para o resumo de desempenho na carteirinha
+  const [resumoDesempenho, setResumoDesempenho] = useState<ResumoDesempenho>({
+    totalSimulados: 0,
+    totalQuestoes: 0,
+    totalAcertos: 0,
+    percentualGeral: 0,
+    carregando: true
+  });
+
+  // Estado para o modal de desempenho do aluno (quando ele clica no painel)
+  const [isModalDesempenhoAlunoOpen, setIsModalDesempenhoAlunoOpen] = useState(false);
+  const [simuladosRespondidosAluno, setSimuladosRespondidosAluno] = useState<{id: string, titulo: string}[]>([]);
+  const [simuladoSelecionadoAluno, setSimuladoSelecionadoAluno] = useState('');
+
   useEffect(() => {
     fetchUsers();
     carregarAlunos();
     verificarAlunosComRespostas();
   }, [currentPage]); // Refetch quando a página mudar
+
+  // Buscar resumo de desempenho quando o usuário for carregado (apenas para alunos)
+  useEffect(() => {
+    if (users.length > 0 && userType === 'Aluno') {
+      buscarResumoDesempenho(users[0].id);
+    }
+  }, [users, userType]);
 
   const fetchUsers = async () => {
     try {
@@ -172,6 +202,148 @@ export default function Perfil() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função para buscar o resumo de desempenho do aluno para exibir na carteirinha
+  const buscarResumoDesempenho = async (alunoId: number) => {
+    try {
+      setResumoDesempenho(prev => ({ ...prev, carregando: true }));
+      
+      // Buscar todas as respostas do aluno
+      const { data: respostas, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id, alternativa_resposta')
+        .eq('aluno_id', alunoId);
+      
+      if (respostasError) {
+        console.error('Erro ao buscar respostas:', respostasError);
+        setResumoDesempenho(prev => ({ ...prev, carregando: false }));
+        return;
+      }
+      
+      if (!respostas || respostas.length === 0) {
+        setResumoDesempenho({
+          totalSimulados: 0,
+          totalQuestoes: 0,
+          totalAcertos: 0,
+          percentualGeral: 0,
+          carregando: false
+        });
+        return;
+      }
+      
+      // Buscar os IDs das questões respondidas
+      const questoesIds = respostas.map(r => r.questao_id);
+      
+      // Buscar as questões para saber a quais simulados pertencem
+      const { data: questoes, error: questoesError } = await supabase
+        .from('questoes')
+        .select('id, simuladoExistente_id')
+        .in('id', questoesIds);
+      
+      if (questoesError) {
+        console.error('Erro ao buscar questões:', questoesError);
+        setResumoDesempenho(prev => ({ ...prev, carregando: false }));
+        return;
+      }
+      
+      // Contar simulados únicos
+      const simuladosUnicos = new Set(questoes?.map(q => q.simuladoExistente_id) || []);
+      
+      // Buscar as alternativas corretas para as questões respondidas
+      const { data: alternativas, error: alternativasError } = await supabase
+        .from('alternativas')
+        .select('questao_id, letra')
+        .in('questao_id', questoesIds)
+        .eq('correta', true);
+      
+      if (alternativasError) {
+        console.error('Erro ao buscar alternativas:', alternativasError);
+        setResumoDesempenho(prev => ({ ...prev, carregando: false }));
+        return;
+      }
+      
+      // Criar mapa de alternativas corretas
+      const alternativasCorretas: { [key: string]: string } = {};
+      alternativas?.forEach(alt => {
+        alternativasCorretas[alt.questao_id] = alt.letra;
+      });
+      
+      // Calcular acertos
+      let acertos = 0;
+      respostas.forEach(resposta => {
+        const correta = alternativasCorretas[resposta.questao_id];
+        if (correta && resposta.alternativa_resposta?.toLowerCase() === correta.toLowerCase()) {
+          acertos++;
+        }
+      });
+      
+      const totalQuestoes = respostas.length;
+      const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
+      
+      setResumoDesempenho({
+        totalSimulados: simuladosUnicos.size,
+        totalQuestoes,
+        totalAcertos: acertos,
+        percentualGeral: percentual,
+        carregando: false
+      });
+      
+    } catch (error) {
+      console.error('Erro ao buscar resumo de desempenho:', error);
+      setResumoDesempenho(prev => ({ ...prev, carregando: false }));
+    }
+  };
+
+  // Função para abrir o modal de desempenho do aluno e buscar simulados respondidos
+  const abrirModalDesempenhoAluno = async (alunoId: number) => {
+    try {
+      console.log('Abrindo modal de desempenho para aluno:', alunoId);
+      
+      // Buscar simulados respondidos diretamente da tabela simulados_respondidos
+      const { data: simuladosRespondidos, error: simuladosRespondidosError } = await supabase
+        .from('simulados_respondidos')
+        .select('simulado_id')
+        .eq('aluno_id', alunoId)
+        .eq('respondido', true);
+      
+      console.log('Simulados respondidos encontrados:', simuladosRespondidos);
+      
+      if (simuladosRespondidosError || !simuladosRespondidos || simuladosRespondidos.length === 0) {
+        alert('Você ainda não respondeu nenhum simulado.');
+        return;
+      }
+      
+      // Pegar IDs únicos de simulados
+      const simuladosIds = Array.from(new Set(simuladosRespondidos.map(sr => sr.simulado_id)));
+      
+      // Buscar os títulos dos simulados na tabela simulados
+      const { data: simulados, error: simuladosError } = await supabase
+        .from('simulados')
+        .select('id, titulo')
+        .in('id', simuladosIds);
+      
+      if (simuladosError || !simulados) {
+        console.error('Erro ao buscar simulados:', simuladosError);
+        return;
+      }
+      
+      setSimuladosRespondidosAluno(simulados.map(s => ({ id: s.id.toString(), titulo: s.titulo })));
+      setSimuladoSelecionadoAluno('');
+      setIsModalDesempenhoAlunoOpen(true);
+      
+    } catch (error) {
+      console.error('Erro ao abrir modal de desempenho:', error);
+    }
+  };
+
+  // Função para o aluno visualizar seu próprio desempenho em um simulado
+  const visualizarMeuDesempenho = async (simuladoId: string) => {
+    if (!users[0]) return;
+    
+    // Reutilizar a função existente, passando o ID do aluno logado
+    await visualizarDesempenhoAluno(users[0].id.toString(), simuladoId);
+    setIsModalDesempenhoAlunoOpen(false);
   };
 
   // Buscar todos os usuários que correspondem ao termo de busca
@@ -853,17 +1025,55 @@ export default function Perfil() {
                 </div>
               </div>
 
-              {/* QR Code decorativo */}
-              <div className="w-20 h-20 bg-white/10 rounded-lg flex items-center justify-center">
-                <div className="w-16 h-16 grid grid-cols-4 grid-rows-4 gap-0.5">
-                  {Array(16).fill(0).map((_, i) => (
-                    <div 
-                      key={i} 
-                      className={`bg-white/80 ${Math.random() > 0.5 ? 'opacity-100' : 'opacity-30'}`}
-                    />
-                  ))}
+              {/* Painel de Desempenho - Clicável */}
+              <button
+                onClick={() => {
+                  console.log('Botão clicado! User ID:', user.id);
+                  abrirModalDesempenhoAluno(user.id);
+                }}
+                disabled={resumoDesempenho.carregando}
+                className={`bg-gradient-to-br from-blue-800/50 to-blue-900/50 rounded-lg p-3 min-w-[140px] sm:min-w-[160px] transition-all border border-transparent ${
+                  resumoDesempenho.carregando
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'hover:from-blue-700/50 hover:to-blue-800/50 cursor-pointer hover:border-blue-500/50'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <ChartBarIcon className="h-4 w-4 text-blue-400" />
+                  <span className="text-xs font-semibold text-blue-400">Desempenho</span>
                 </div>
-              </div>
+                {resumoDesempenho.carregando ? (
+                  <div className="flex items-center justify-center h-16">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+                  </div>
+                ) : resumoDesempenho.totalSimulados === 0 ? (
+                  <div className="text-center py-2">
+                    <p className="text-xs text-gray-400">Nenhum simulado</p>
+                    <p className="text-xs text-gray-400">respondido</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-center">
+                      <span className={`text-2xl font-bold ${
+                        resumoDesempenho.percentualGeral >= 70 ? 'text-green-400' :
+                        resumoDesempenho.percentualGeral >= 50 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {resumoDesempenho.percentualGeral}%
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-300">
+                        {resumoDesempenho.totalAcertos}/{resumoDesempenho.totalQuestoes} acertos
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {resumoDesempenho.totalSimulados} simulado{resumoDesempenho.totalSimulados > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <p className="text-xs text-blue-400 mt-1">Clique para detalhes</p>
+                  </div>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -926,6 +1136,51 @@ export default function Perfil() {
             <div className="flex justify-end">
               <button
                 onClick={() => setIsModalDesempenhosOpen(false)}
+                className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Seleção de Simulado para o Aluno */}
+      {isModalDesempenhoAlunoOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-5 rounded-lg w-full max-w-md mx-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Meu Desempenho</h2>
+              <button 
+                onClick={() => setIsModalDesempenhoAlunoOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="bg-gray-800 p-4 rounded-lg mb-4">
+              <p className="text-gray-300 text-sm mb-4">
+                Selecione um simulado para ver seu desempenho detalhado:
+              </p>
+              
+              <div className="space-y-2">
+                {simuladosRespondidosAluno.map((simulado) => (
+                  <button
+                    key={simulado.id}
+                    onClick={() => visualizarMeuDesempenho(simulado.id)}
+                    className="w-full p-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-left transition-colors flex items-center justify-between group"
+                  >
+                    <span className="text-white">{simulado.titulo}</span>
+                    <ChartBarIcon className="h-5 w-5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsModalDesempenhoAlunoOpen(false)}
                 className="py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
               >
                 Fechar
