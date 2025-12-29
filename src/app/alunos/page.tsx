@@ -161,17 +161,24 @@ export default function Alunos() {
   const handleDelete = async (id: number) => {
     if (window.confirm('Tem certeza que deseja excluir este aluno?')) {
       try {
-        const { error } = await supabase
-          .from('usuarios')
-          .delete()
-          .eq('id', id);
+        const response = await fetch('/api/users/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id }),
+        });
 
-        if (error) throw error;
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Erro ao excluir usuário');
+        }
 
         setUsers(users.filter(user => user.id !== id));
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error deleting user:', error);
-        alert('Erro ao excluir aluno. Por favor, tente novamente.');
+        alert(error.message || 'Erro ao excluir aluno. Por favor, tente novamente.');
       }
     }
   };
