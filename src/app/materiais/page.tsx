@@ -12,6 +12,10 @@ const PdfViewer = ({ url, onClose, permiteDownload = false }: { url: string; onC
   const [isMobile, setIsMobile] = useState(false);
   // Estado para controlar se o PDF está carregando
   const [isLoading, setIsLoading] = useState(true);
+  // Detecta se é Safari
+  const [isSafari, setIsSafari] = useState(false);
+  // Estado para controlar se houve erro no carregamento
+  const [hasError, setHasError] = useState(false);
   
   useEffect(() => {
     // Função para verificar se é um dispositivo móvel
@@ -19,8 +23,17 @@ const PdfViewer = ({ url, onClose, permiteDownload = false }: { url: string; onC
       setIsMobile(window.innerWidth <= 768);
     };
     
+    // Função para detectar Safari
+    const detectSafari = () => {
+      const userAgent = navigator.userAgent;
+      const isSafariDesktop = /^((?!chrome|android).)*safari/i.test(userAgent);
+      const isSafariMobile = /Safari/.test(userAgent) && /Mobile/.test(userAgent) && !/Chrome/.test(userAgent);
+      setIsSafari(isSafariDesktop || isSafariMobile);
+    };
+    
     // Verifica no carregamento inicial
     checkMobile();
+    detectSafari();
     
     // Adiciona um event listener para redimensionamento da janela
     window.addEventListener('resize', checkMobile);
@@ -30,13 +43,69 @@ const PdfViewer = ({ url, onClose, permiteDownload = false }: { url: string; onC
   }, []);
   
   // Para desktop, mantenha a URL atual com toolbar=0
-  // Para mobile, não use parâmetros especiais para permitir navegador nativo
+  // Para mobile Safari, abre em nova aba
+  // Para outros mobile, não use parâmetros especiais
   const pdfUrl = isMobile ? url : `${url}#toolbar=0`;
   
   // Função para fazer o download do PDF
   const handleDownload = (downloadUrl: string) => {
     window.open(downloadUrl, '_blank');
   };
+  
+  // Função para abrir PDF em nova aba (especialmente para Safari mobile)
+  const handleOpenInNewTab = () => {
+    window.open(url, '_blank');
+  };
+  
+  // Função para lidar com erro de carregamento do iframe
+  const handleIframeError = () => {
+    setHasError(true);
+    setIsLoading(false);
+  };
+  
+  // Se for Safari mobile, mostra opções alternativas
+  if (isMobile && isSafari) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg w-full max-w-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Visualizar PDF</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          </div>
+          
+          <div className="text-center">
+            <DocumentIcon className="h-16 w-16 text-blue-600 mx-auto mb-4" />
+            <p className="text-gray-700 mb-6">
+              Para uma melhor experiência de visualização no Safari, recomendamos abrir o documento em uma nova aba.
+            </p>
+            
+            <div className="space-y-3">
+              <button
+                onClick={handleOpenInNewTab}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+              >
+                Abrir em Nova Aba
+              </button>
+              
+              {permiteDownload && (
+                <button
+                  onClick={() => handleDownload(url)}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium"
+                >
+                  Download do PDF
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -62,9 +131,8 @@ const PdfViewer = ({ url, onClose, permiteDownload = false }: { url: string; onC
         </div>
         
         <div className="relative flex-1 overflow-hidden">
-          {/* iframe para visualização do PDF */}
           {/* Indicador de carregamento */}
-          {isLoading && (
+          {isLoading && !hasError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-white">
               <svg className="animate-spin h-10 w-10 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -74,13 +142,51 @@ const PdfViewer = ({ url, onClose, permiteDownload = false }: { url: string; onC
             </div>
           )}
           
-          <iframe
-            src={pdfUrl}
-            className="w-full h-full"
-            title="PDF Viewer"
-            id="pdf-viewer"
-            onLoad={() => setIsLoading(false)}
-          />
+          {/* Mensagem de erro ou fallback */}
+          {hasError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white">
+              <DocumentIcon className="h-16 w-16 text-red-500 mb-4" />
+              <p className="text-gray-700 text-lg font-medium mb-4">Não foi possível carregar o documento no visualizador</p>
+              <div className="space-y-2">
+                <button
+                  onClick={handleOpenInNewTab}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+                >
+                  Abrir em Nova Aba
+                </button>
+                {permiteDownload && (
+                  <button
+                    onClick={() => handleDownload(url)}
+                    className="ml-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium"
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* iframe para visualização do PDF */}
+          {!hasError && (
+            <iframe
+              src={pdfUrl}
+              className="w-full h-full"
+              title="PDF Viewer"
+              id="pdf-viewer"
+              onLoad={() => setIsLoading(false)}
+              onError={handleIframeError}
+              // Adiciona timeout para detectar problemas de carregamento
+              onLoadStart={() => {
+                // Timeout de 10 segundos para detectar problemas
+                setTimeout(() => {
+                  if (isLoading) {
+                    setHasError(true);
+                    setIsLoading(false);
+                  }
+                }, 10000);
+              }}
+            />
+          )}
           
           {/* Para dispositivos móveis, deixamos o visualizador nativo do PDF cuidar da navegação */}
         </div>

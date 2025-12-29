@@ -5,6 +5,7 @@ interface User {
   id: string;
   email: string;
   tipo: string;
+  status: string;
 }
 
 // Cache global para o usuário
@@ -28,6 +29,7 @@ const resetGlobalState = () => {
 export function useUser() {
   const [user, setUser] = useState<User | null>(globalUser);
   const [loading, setLoading] = useState(globalLoading);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function getUser() {
@@ -40,15 +42,27 @@ export function useUser() {
         if (authUser) {
           const { data: userData } = await supabase
             .from('usuarios')
-            .select('id, email, tipo')
+            .select('id, email, tipo, status')
             .eq('user_id', authUser.id)
             .single();
 
           if (userData) {
+            // Verifica se o usuário está ativo para permitir acesso ao sistema
+            if (userData.status === 'inativo') {
+              resetGlobalState();
+              setUser(null);
+              setError('Acesso negado. Sua conta está inativa.');
+              return;
+            }
+            
+            // Resetar erro se usuário estiver ativo
+            setError(null);
+
             const userInfo = {
               id: userData.id,
               email: userData.email,
-              tipo: userData.tipo
+              tipo: userData.tipo,
+              status: userData.status
             };
             updateGlobalUser(userInfo);
             setUser(userInfo);
@@ -92,5 +106,5 @@ export function useUser() {
     };
   }, []);
 
-  return { user, loading };
+  return { user, loading, error };
 }
