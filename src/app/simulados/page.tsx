@@ -13,20 +13,30 @@ interface Pasta {
   ordem: number;
 }
 
-interface Simulado {
-  id: number;
-  titulo: string;
-  descricao: string | null;
-  pasta_id: number;
-  pdf_questoes: string;
-  pdf_gabarito: string;
-  video_resolucao: string | null;
-  ordem: number;
-  ativo: boolean;
-  download_permitido: boolean;
+interface SimuladoDigital {
+  id: string;
+  mes: string;
+  ano: number;
+  pasta_id: number | null;
   created_at: string;
-  updated_at: string;
+  questoes_count?: number;
 }
+
+// TIPO 1 - DESATIVADO: Interface para simulados com PDFs
+// interface Simulado {
+//   id: number;
+//   titulo: string;
+//   descricao: string | null;
+//   pasta_id: number;
+//   pdf_questoes: string;
+//   pdf_gabarito: string;
+//   video_resolucao: string | null;
+//   ordem: number;
+//   ativo: boolean;
+//   download_permitido: boolean;
+//   created_at: string;
+//   updated_at: string;
+// }
 
 interface StorageError {
   message: string;
@@ -82,47 +92,56 @@ type DificuldadeType = 'fácil' | 'média' | 'difícil';
 
 export default function Simulados() {
   const [pastas, setPastas] = useState<Pasta[]>([]);
-  const [simulados, setSimulados] = useState<Simulado[]>([]);
+  // TIPO 1 - DESATIVADO: Estado para simulados com PDFs
+  // const [simulados, setSimulados] = useState<Simulado[]>([]);
+  const [simuladosDigitais, setSimuladosDigitais] = useState<SimuladoDigital[]>([]);
   const [pastaAtual, setPastaAtual] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [breadcrumbs, setBreadcrumbs] = useState<Pasta[]>([]);
   const [userType, setUserType] = useState<string | null>(null);
   const [isModalPastaOpen, setIsModalPastaOpen] = useState(false);
-  const [isModalSimuladoOpen, setIsModalSimuladoOpen] = useState(false);
+  // TIPO 1 - DESATIVADO: Modal para adicionar simulado com PDF
+  // const [isModalSimuladoOpen, setIsModalSimuladoOpen] = useState(false);
   const [isModalResolucaoOpen, setIsModalResolucaoOpen] = useState(false);
   const [isModalPdfOpen, setIsModalPdfOpen] = useState(false);
   const [isModalCriarSimuladoOpen, setIsModalCriarSimuladoOpen] = useState(false);
   const [mostrarDetalhesQuestoes, setMostrarDetalhesQuestoes] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [permiteDownload, setPermiteDownload] = useState(false);
-  const [simuladoSelecionado, setSimuladoSelecionado] = useState<Simulado | null>(null);
+  // TIPO 1 - DESATIVADO: Simulado selecionado (PDF)
+  // const [simuladoSelecionado, setSimuladoSelecionado] = useState<Simulado | null>(null);
   const [novaPasta, setNovaPasta] = useState({
     titulo: '',
     descricao: '',
   });
-  const [novoSimulado, setNovoSimulado] = useState({
-    titulo: '',
-    descricao: '',
-    arquivoQuestoes: null as File | null,
-    arquivoGabarito: null as File | null,
-    videoResolucao: '',
-    downloadPermitido: false
-  });
-  const [arquivoQuestoes, setArquivoQuestoes] = useState<File | null>(null);
-  const [arquivoGabarito, setArquivoGabarito] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
-  const [showPdfModal, setShowPdfModal] = useState(false);
+  // TIPO 1 - DESATIVADO: Estado para novo simulado com PDFs
+  // const [novoSimulado, setNovoSimulado] = useState({
+  //   titulo: '',
+  //   descricao: '',
+  //   arquivoQuestoes: null as File | null,
+  //   arquivoGabarito: null as File | null,
+  //   videoResolucao: '',
+  //   downloadPermitido: false
+  // });
+  // TIPO 1 - DESATIVADO: Estados para arquivos PDF
+  // const [arquivoQuestoes, setArquivoQuestoes] = useState<File | null>(null);
+  // const [arquivoGabarito, setArquivoGabarito] = useState<File | null>(null);
+  // TIPO 1 - DESATIVADO: Estado de upload
+  // const [uploading, setUploading] = useState(false);
+  // TIPO 1 - DESATIVADO: Estados para visualização de PDF
+  // const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
+  // const [showPdfModal, setShowPdfModal] = useState(false);
   const [isEditingPasta, setIsEditingPasta] = useState<number | null>(null);
   const [editPastaTitle, setEditPastaTitle] = useState('');
-  const [isEditingSimulado, setIsEditingSimulado] = useState<number | null>(null);
-  const [editSimulado, setEditSimulado] = useState({
-    titulo: '',
-    pdf_questoes: '',
-    pdf_gabarito: '',
-    video_resolucao: ''
-  });
-  const [isModalEditSimuladoOpen, setIsModalEditSimuladoOpen] = useState(false);
+  // TIPO 1 - DESATIVADO: Estados para edição de simulado PDF
+  // const [isEditingSimulado, setIsEditingSimulado] = useState<number | null>(null);
+  // const [editSimulado, setEditSimulado] = useState({
+  //   titulo: '',
+  //   pdf_questoes: '',
+  //   pdf_gabarito: '',
+  //   video_resolucao: ''
+  // });
+  // const [isModalEditSimuladoOpen, setIsModalEditSimuladoOpen] = useState(false);
   const [isModalResultadoOpen, setIsModalResultadoOpen] = useState(false);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [novoResultado, setNovoResultado] = useState<NovoResultado>({
@@ -208,7 +227,8 @@ export default function Simulados() {
     dificuldade: 'fácil',
     alternativaCorreta: 'a'
   });
-  const [simuladosDisponiveis, setSimuladosDisponiveis] = useState<Simulado[]>([]);
+  // TIPO 1 - DESATIVADO: Simulados disponíveis (PDFs) para vincular gabarito
+  // const [simuladosDisponiveis, setSimuladosDisponiveis] = useState<Simulado[]>([]);
   const alunosFiltrados = alunos.filter(aluno => 
     aluno.nome.toLowerCase().includes(searchAluno.toLowerCase())
   );
@@ -241,8 +261,9 @@ export default function Simulados() {
     fetchUserType();
     carregarConteudo();
     carregarAlunos();
-    carregarSimuladosDisponiveis();
+    // TIPO 1 - DESATIVADO: carregarSimuladosDisponiveis();
     carregarSimuladosRespondidos();
+    carregarSimuladosDigitais();
   }, [pastaAtual]);
 
   const fetchUserType = async () => {
@@ -283,25 +304,56 @@ export default function Simulados() {
       if (pastasError) throw pastasError;
       setPastas(pastasData || []);
 
-      if (pastaAtual !== null) {
-        const { data: simuladosData, error: simuladosError } = await supabase
-          .from('simulados')
-          .select('*')
-          .eq('pasta_id', pastaAtual)
-          .eq('ativo', true)
-          .order('ordem');
+      // TIPO 1 - DESATIVADO: Carregamento de simulados PDFs
+      // if (pastaAtual !== null) {
+      //   const { data: simuladosData, error: simuladosError } = await supabase
+      //     .from('simulados')
+      //     .select('*')
+      //     .eq('pasta_id', pastaAtual)
+      //     .eq('ativo', true)
+      //     .order('ordem');
 
-        if (simuladosError) throw simuladosError;
-        setSimulados(simuladosData || []);
-      } else {
-        setSimulados([]);
-      }
+      //   if (simuladosError) throw simuladosError;
+      //   setSimulados(simuladosData || []);
+      // } else {
+      //   setSimulados([]);
+      // }
 
       await atualizarBreadcrumbs();
     } catch (error) {
       console.error('Erro ao carregar conteúdo:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const carregarSimuladosDigitais = async () => {
+    const supabase = createSupabaseClient();
+    
+    try {
+      let query = supabase
+        .from('simulados_criados')
+        .select('*, questoes(count)');
+
+      if (pastaAtual !== null) {
+        query = query.eq('pasta_id', pastaAtual);
+      } else {
+        query = query.is('pasta_id', null);
+      }
+
+      const { data, error } = await query.order('ano', { ascending: false }).order('mes');
+
+      if (error) throw error;
+
+      const simuladosComContagem = data?.map(sim => ({
+        ...sim,
+        questoes_count: sim.questoes?.[0]?.count || 0
+      })) || [];
+
+      setSimuladosDigitais(simuladosComContagem);
+    } catch (error) {
+      console.error('Erro ao carregar simulados digitais:', error);
+      setSimuladosDigitais([]);
     }
   };
 
@@ -356,109 +408,112 @@ export default function Simulados() {
     }
   };
 
-  const handleAddSimulado = async () => {
-    if (!novoSimulado.titulo || !novoSimulado.arquivoQuestoes || !novoSimulado.arquivoGabarito) {
-      alert('Por favor, preencha todos os campos obrigatórios');
-      return;
-    }
+  // TIPO 1 - DESATIVADO: Função para adicionar simulado com PDFs
+  // const handleAddSimulado = async () => {
+  //   if (!novoSimulado.titulo || !novoSimulado.arquivoQuestoes || !novoSimulado.arquivoGabarito) {
+  //     alert('Por favor, preencha todos os campos obrigatórios');
+  //     return;
+  //   }
 
-    setUploading(true);
-    try {
-      const supabase = createSupabaseClient();
-      let questoesUrl = '';
-      let gabaritoUrl = '';
+  //   setUploading(true);
+  //   try {
+  //     const supabase = createSupabaseClient();
+  //     let questoesUrl = '';
+  //     let gabaritoUrl = '';
 
-      if (novoSimulado.arquivoQuestoes) {
-        const { data: questoesData, error: questoesError } = await supabase.storage
-          .from('simulados')
-          .upload(`${Date.now()}_questoes_${novoSimulado.arquivoQuestoes.name}`, novoSimulado.arquivoQuestoes);
+  //     if (novoSimulado.arquivoQuestoes) {
+  //       const { data: questoesData, error: questoesError } = await supabase.storage
+  //         .from('simulados')
+  //         .upload(`${Date.now()}_questoes_${novoSimulado.arquivoQuestoes.name}`, novoSimulado.arquivoQuestoes);
 
-        if (questoesError) throw questoesError;
-        questoesUrl = questoesData.path;
-      }
+  //       if (questoesError) throw questoesError;
+  //       questoesUrl = questoesData.path;
+  //     }
 
-      if (novoSimulado.arquivoGabarito) {
-        const { data: gabaritoData, error: gabaritoError } = await supabase.storage
-          .from('simulados')
-          .upload(`${Date.now()}_gabarito_${novoSimulado.arquivoGabarito.name}`, novoSimulado.arquivoGabarito);
+  //     if (novoSimulado.arquivoGabarito) {
+  //       const { data: gabaritoData, error: gabaritoError } = await supabase.storage
+  //         .from('simulados')
+  //         .upload(`${Date.now()}_gabarito_${novoSimulado.arquivoGabarito.name}`, novoSimulado.arquivoGabarito);
 
-        if (gabaritoError) throw gabaritoError;
-        gabaritoUrl = gabaritoData.path;
-      }
+  //       if (gabaritoError) throw gabaritoError;
+  //       gabaritoUrl = gabaritoData.path;
+  //     }
 
-      const { data: simulado, error: simuladoError } = await supabase
-        .from('simulados')
-        .insert([
-          {
-            titulo: novoSimulado.titulo,
-            descricao: novoSimulado.descricao,
-            pasta_id: pastaAtual,
-            pdf_questoes: questoesUrl,
-            pdf_gabarito: gabaritoUrl,
-            video_resolucao: novoSimulado.videoResolucao,
-            download_permitido: novoSimulado.downloadPermitido,
-            ativo: true,
-            ordem: simulados.length
-          }
-        ])
-        .select()
-        .single();
+  //     const { data: simulado, error: simuladoError } = await supabase
+  //       .from('simulados')
+  //       .insert([
+  //         {
+  //           titulo: novoSimulado.titulo,
+  //           descricao: novoSimulado.descricao,
+  //           pasta_id: pastaAtual,
+  //           pdf_questoes: questoesUrl,
+  //           pdf_gabarito: gabaritoUrl,
+  //           video_resolucao: novoSimulado.videoResolucao,
+  //           download_permitido: novoSimulado.downloadPermitido,
+  //           ativo: true,
+  //           ordem: simulados.length
+  //         }
+  //       ])
+  //       .select()
+  //       .single();
 
-      if (simuladoError) throw simuladoError;
+  //     if (simuladoError) throw simuladoError;
 
-      setSimulados([...simulados, simulado]);
-      setIsModalSimuladoOpen(false);
-      setNovoSimulado({
-        titulo: '',
-        descricao: '',
-        arquivoQuestoes: null,
-        arquivoGabarito: null,
-        videoResolucao: '',
-        downloadPermitido: false
-      });
+  //     setSimulados([...simulados, simulado]);
+  //     setIsModalSimuladoOpen(false);
+  //     setNovoSimulado({
+  //       titulo: '',
+  //       descricao: '',
+  //       arquivoQuestoes: null,
+  //       arquivoGabarito: null,
+  //       videoResolucao: '',
+  //       downloadPermitido: false
+  //     });
 
-    } catch (error) {
-      console.error('Erro ao adicionar simulado:', error);
-      alert('Erro ao adicionar simulado. Por favor, tente novamente.');
-    } finally {
-      setUploading(false);
-    }
-  };
+  //   } catch (error) {
+  //     console.error('Erro ao adicionar simulado:', error);
+  //     alert('Erro ao adicionar simulado. Por favor, tente novamente.');
+  //   } finally {
+  //     setUploading(false);
+  //   }
+  // };
 
-  const handleDeleteSimulado = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir este simulado?')) return;
+  // TIPO 1 - DESATIVADO: Função para deletar simulado PDF
+  // const handleDeleteSimulado = async (id: number) => {
+  //   if (!confirm('Tem certeza que deseja excluir este simulado?')) return;
 
-    try {
-      const supabase = createSupabaseClient();
-      const { error } = await supabase
-        .from('simulados')
-        .update({ ativo: false })
-        .eq('id', id);
+  //   try {
+  //     const supabase = createSupabaseClient();
+  //     const { error } = await supabase
+  //       .from('simulados')
+  //       .update({ ativo: false })
+  //       .eq('id', id);
 
-      if (error) throw error;
+  //     if (error) throw error;
 
-      // Atualiza a lista de simulados removendo o simulado excluído
-      setSimulados(simulados.filter(s => s.id !== id));
-    } catch (error) {
-      console.error('Erro ao excluir simulado:', error);
-      alert('Erro ao excluir simulado. Por favor, tente novamente.');
-    }
-  };
+  //     // Atualiza a lista de simulados removendo o simulado excluído
+  //     setSimulados(simulados.filter(s => s.id !== id));
+  //   } catch (error) {
+  //     console.error('Erro ao excluir simulado:', error);
+  //     alert('Erro ao excluir simulado. Por favor, tente novamente.');
+  //   }
+  // };
 
-  const abrirPdf = async (url: string | null, permitirDownload: boolean) => {
-    if (!url) return;
+  // TIPO 1 - DESATIVADO: Função para abrir PDF de simulado
+  // const abrirPdf = async (url: string | null, permitirDownload: boolean) => {
+  //   if (!url) return;
 
-    const pdfUrl = url.startsWith('http') 
-      ? url 
-      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/simulados/${url}`;
+  //   const pdfUrl = url.startsWith('http') 
+  //     ? url 
+  //     : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/simulados/${url}`;
 
-    if (permitirDownload) {
-      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      setSelectedPdf(pdfUrl);
-      setShowPdfModal(true);
-    }
-  };
+  //   if (permitirDownload) {
+  //     window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+  //   } else {
+  //     setSelectedPdf(pdfUrl);
+  //     setShowPdfModal(true);
+  //   }
+  // };
   
   // Função para visualizar as alternativas do gabarito
   const visualizarAlternativasGabarito = async (simuladoId: number, titulo: string) => {
@@ -519,33 +574,34 @@ export default function Simulados() {
   };
 
 
-  const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
-    return (
-      <div className="w-full h-full relative bg-gray-900">
-        <button
-          onClick={onClose}
-          className="fixed top-4 right-4 z-50 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2"
-        >
-          <XMarkIcon className="h-8 w-8" />
-        </button>
-        <div className="absolute inset-0">
-          <iframe 
-            src={`${url}#toolbar=0`} 
-            className="w-full h-full" 
-            title="PDF Viewer"
-          />
-        </div>
-      </div>
-    );
-  };
+  // TIPO 1 - DESATIVADO: Componentes para visualização de PDF
+  // const PdfViewer = ({ url, onClose }: { url: string; onClose: () => void }) => {
+  //   return (
+  //     <div className="w-full h-full relative bg-gray-900">
+  //       <button
+  //         onClick={onClose}
+  //         className="fixed top-4 right-4 z-50 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2"
+  //       >
+  //         <XMarkIcon className="h-8 w-8" />
+  //       </button>
+  //       <div className="absolute inset-0">
+  //         <iframe 
+  //           src={`${url}#toolbar=0`} 
+  //           className="w-full h-full" 
+  //           title="PDF Viewer"
+  //         />
+  //       </div>
+  //     </div>
+  //   );
+  // };
 
-  const PdfModal = ({ url, onClose }: { url: string; onClose: () => void }) => {
-    return (
-      <div className="fixed inset-0 z-40">
-        <PdfViewer url={url} onClose={onClose} />
-      </div>
-    );
-  };
+  // const PdfModal = ({ url, onClose }: { url: string; onClose: () => void }) => {
+  //   return (
+  //     <div className="fixed inset-0 z-40">
+  //       <PdfViewer url={url} onClose={onClose} />
+  //     </div>
+  //   );
+  // };
 
   const getPandaVideoEmbedCode = (urlOrId: string) => {
     // Extrai o ID do vídeo da URL ou usa o próprio ID se for fornecido diretamente
@@ -557,14 +613,15 @@ export default function Simulados() {
     return `<div style="position:relative;padding-top:56.25%;"><iframe id="panda-${videoId}" src="https://player-vz-bc721c9c-237.tv.pandavideo.com.br/embed/?v=${videoId}" style="border:none;position:absolute;top:0;left:0;" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowfullscreen=true width="100%" height="100%" fetchpriority="high"></iframe></div>`;
   };
 
-  const abrirResolucao = (simulado: Simulado) => {
-    if (!simulado.video_resolucao) return;
-    setSimuladoSelecionado({
-      ...simulado,
-      video_resolucao: simulado.video_resolucao // Não precisa mais transformar a URL
-    });
-    setIsModalResolucaoOpen(true);
-  };
+  // TIPO 1 - DESATIVADO: Função para abrir vídeo de resolução do simulado PDF
+  // const abrirResolucao = (simulado: Simulado) => {
+  //   if (!simulado.video_resolucao) return;
+  //   setSimuladoSelecionado({
+  //     ...simulado,
+  //     video_resolucao: simulado.video_resolucao
+  //   });
+  //   setIsModalResolucaoOpen(true);
+  // };
 
   const handleEditPasta = (pastaId: number) => {
     const pasta = pastas.find(p => p.id === pastaId);
@@ -574,56 +631,58 @@ export default function Simulados() {
     }
   };
   
-  const handleEditSimulado = (simulado: Simulado) => {
-    if (userType?.toLowerCase() !== 'admin') return;
-    
-    setIsEditingSimulado(simulado.id);
-    setEditSimulado({
-      titulo: simulado.titulo,
-      pdf_questoes: simulado.pdf_questoes,
-      pdf_gabarito: simulado.pdf_gabarito,
-      video_resolucao: simulado.video_resolucao || ''
-    });
-    setIsModalEditSimuladoOpen(true);
-  };
+  // TIPO 1 - DESATIVADO: Função para editar simulado PDF
+  // const handleEditSimulado = (simulado: Simulado) => {
+  //   if (userType?.toLowerCase() !== 'admin') return;
+  //   
+  //   setIsEditingSimulado(simulado.id);
+  //   setEditSimulado({
+  //     titulo: simulado.titulo,
+  //     pdf_questoes: simulado.pdf_questoes,
+  //     pdf_gabarito: simulado.pdf_gabarito,
+  //     video_resolucao: simulado.video_resolucao || ''
+  //   });
+  //   setIsModalEditSimuladoOpen(true);
+  // };
 
-  const handleSaveEditSimulado = async () => {
-    if (!isEditingSimulado || userType?.toLowerCase() !== 'admin') return;
-    
-    const supabase = createSupabaseClient();
-    try {
-      const { data, error } = await supabase
-        .from('simulados')
-        .update({
-          titulo: editSimulado.titulo,
-          video_resolucao: editSimulado.video_resolucao
-        })
-        .eq('id', isEditingSimulado)
-        .select()
-        .single();
+  // TIPO 1 - DESATIVADO: Função para salvar edição de simulado PDF
+  // const handleSaveEditSimulado = async () => {
+  //   if (!isEditingSimulado || userType?.toLowerCase() !== 'admin') return;
+  //   
+  //   const supabase = createSupabaseClient();
+  //   try {
+  //     const { data, error } = await supabase
+  //       .from('simulados')
+  //       .update({
+  //         titulo: editSimulado.titulo,
+  //         video_resolucao: editSimulado.video_resolucao
+  //       })
+  //       .eq('id', isEditingSimulado)
+  //       .select()
+  //       .single();
 
-      if (error) {
-        throw error;
-      }
+  //     if (error) {
+  //       throw error;
+  //     }
 
-      // Atualizar o simulado na lista local
-      setSimulados(simulados.map(simulado => 
-        simulado.id === isEditingSimulado 
-          ? { ...simulado, 
-              titulo: editSimulado.titulo, 
-              video_resolucao: editSimulado.video_resolucao 
-            } 
-          : simulado
-      ));
+  //     // Atualizar o simulado na lista local
+  //     setSimulados(simulados.map(simulado => 
+  //       simulado.id === isEditingSimulado 
+  //         ? { ...simulado, 
+  //             titulo: editSimulado.titulo, 
+  //             video_resolucao: editSimulado.video_resolucao 
+  //           } 
+  //         : simulado
+  //     ));
 
-      // Resetar os estados de edição
-      setIsEditingSimulado(null);
-      setIsModalEditSimuladoOpen(false);
-    } catch (error) {
-      console.error('Erro ao atualizar simulado:', error);
-      alert('Ocorreu um erro ao atualizar o simulado. Por favor, tente novamente.');
-    }
-  };
+  //     // Resetar os estados de edição
+  //     setIsEditingSimulado(null);
+  //     setIsModalEditSimuladoOpen(false);
+  //   } catch (error) {
+  //     console.error('Erro ao atualizar simulado:', error);
+  //     alert('Ocorreu um erro ao atualizar o simulado. Por favor, tente novamente.');
+  //   }
+  // };
 
   const handleSaveEditPasta = async (pastaId: number) => {
     if (!editPastaTitle.trim() || userType?.toLowerCase() !== 'admin') return;
@@ -915,68 +974,69 @@ export default function Simulados() {
       .replace(/[\u0300-\u036f]/g, '');
   };
 
-  const handleAddResultado = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!novoResultado.arquivoResultado || !novoResultado.mes || !novoResultado.alunoId || !searchAluno) {
-      alert('Por favor, preencha todos os campos');
-      return;
-    }
+  // TIPO 1 - DESATIVADO: Função para adicionar resultado de simulado (PDF)
+  // const handleAddResultado = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   
+  //   if (!novoResultado.arquivoResultado || !novoResultado.mes || !novoResultado.alunoId || !searchAluno) {
+  //     alert('Por favor, preencha todos os campos');
+  //     return;
+  //   }
 
-    setUploading(true);
-    try {
-      const supabase = createSupabaseClient();
-      const fileExt = novoResultado.arquivoResultado.name.split('.').pop();
-      const mesNormalizado = normalizarMes(novoResultado.mes);
-      const fileName = `resultados/${Date.now()}_resultado_${novoResultado.alunoId}_${mesNormalizado}.${fileExt}`;
-      
-      // Upload do arquivo PDF para o bucket 'resultados'
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('resultados')
-        .upload(fileName, novoResultado.arquivoResultado, {
-          contentType: 'application/pdf'
-        });
+  //   setUploading(true);
+  //   try {
+  //     const supabase = createSupabaseClient();
+  //     const fileExt = novoResultado.arquivoResultado.name.split('.').pop();
+  //     const mesNormalizado = normalizarMes(novoResultado.mes);
+  //     const fileName = `resultados/${Date.now()}_resultado_${novoResultado.alunoId}_${mesNormalizado}.${fileExt}`;
+  //     
+  //     // Upload do arquivo PDF para o bucket 'resultados'
+  //     const { data: uploadData, error: uploadError } = await supabase.storage
+  //       .from('resultados')
+  //       .upload(fileName, novoResultado.arquivoResultado, {
+  //         contentType: 'application/pdf'
+  //       });
 
-      if (uploadError) throw uploadError;
+  //     if (uploadError) throw uploadError;
 
-      // Pegar a URL pública do arquivo
-      const { data: { publicUrl } } = supabase
-        .storage
-        .from('resultados')
-        .getPublicUrl(uploadData.path);
+  //     // Pegar a URL pública do arquivo
+  //     const { data: { publicUrl } } = supabase
+  //       .storage
+  //       .from('resultados')
+  //       .getPublicUrl(uploadData.path);
 
-      // Salvar referência no banco de dados
-      const { error: dbError } = await supabase
-        .from('resultado_simulado')
-        .insert([{
-          id_aluno: parseInt(novoResultado.alunoId),
-          nome_aluno: searchAluno,
-          mes_simulado: novoResultado.mes,
-          url_simulado: publicUrl
-        }]);
+  //     // Salvar referência no banco de dados
+  //     const { error: dbError } = await supabase
+  //       .from('resultado_simulado')
+  //       .insert([{
+  //         id_aluno: parseInt(novoResultado.alunoId),
+  //         nome_aluno: searchAluno,
+  //         mes_simulado: novoResultado.mes,
+  //         url_simulado: publicUrl
+  //       }]);
 
-      if (dbError) {
-        await supabase.storage
-          .from('resultados')
-          .remove([uploadData.path]);
-        throw dbError;
-      }
+  //     if (dbError) {
+  //       await supabase.storage
+  //         .from('resultados')
+  //         .remove([uploadData.path]);
+  //       throw dbError;
+  //     }
 
-      // Limpar o formulário e fechar o modal
-      setNovoResultado({
-        arquivoResultado: null,
-        mes: '',
-        alunoId: ''
-      });
-      setSearchAluno('');
-      setIsModalResultadoOpen(false);
-      alert('Resultado adicionado com sucesso!');
-    } catch (error: any) {
-      alert('Erro ao adicionar resultado. Por favor, tente novamente.');
-    } finally {
-      setUploading(false);
-    }
-  };
+  //     // Limpar o formulário e fechar o modal
+  //     setNovoResultado({
+  //       arquivoResultado: null,
+  //       mes: '',
+  //       alunoId: ''
+  //     });
+  //     setSearchAluno('');
+  //     setIsModalResultadoOpen(false);
+  //     alert('Resultado adicionado com sucesso!');
+  //   } catch (error: any) {
+  //     alert('Erro ao adicionar resultado. Por favor, tente novamente.');
+  //   } finally {
+  //     setUploading(false);
+  //   }
+  // };
 
   const carregarResultadosAluno = async () => {
     const supabase = createSupabaseClient();
@@ -1117,21 +1177,22 @@ export default function Simulados() {
     }
   };
 
-  const carregarSimuladosDisponiveis = async () => {
-    const supabase = createSupabaseClient();
-    try {
-      const { data, error } = await supabase
-        .from('simulados')
-        .select('*')
-        .eq('ativo', true)
-        .order('titulo');
-      
-      if (error) throw error;
-      setSimuladosDisponiveis(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar simulados:', error);
-    }
-  };
+  // TIPO 1 - DESATIVADO: Função para carregar simulados PDFs disponíveis
+  // const carregarSimuladosDisponiveis = async () => {
+  //   const supabase = createSupabaseClient();
+  //   try {
+  //     const { data, error } = await supabase
+  //       .from('simulados')
+  //       .select('*')
+  //       .eq('ativo', true)
+  //       .order('titulo');
+  //     
+  //     if (error) throw error;
+  //     setSimuladosDisponiveis(data || []);
+  //   } catch (error) {
+  //     console.error('Erro ao carregar simulados:', error);
+  //   }
+  // };
 
   // Função para carregar os simulados que o aluno já respondeu
   const carregarSimuladosRespondidos = async () => {
@@ -1239,7 +1300,8 @@ export default function Simulados() {
     }
   };
 
-  const abrirCartaoResposta = async (simulado: Simulado) => {
+  // TIPO 1 - DESATIVADO: Tipo Simulado foi desativado, usando 'any' temporariamente
+  const abrirCartaoResposta = async (simulado: any) => {
     // Reset do estado de resultados do simulado para garantir que começamos com a tela de respostas
     setResultadoSimulado({
       acertos: 0,
@@ -1864,18 +1926,25 @@ export default function Simulados() {
               </button>
               <button
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+                onClick={() => window.location.href = '/simulados/criar'}
+              >
+                Novo Simulado Digital
+              </button>
+              <button
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md"
                 onClick={() => setIsModalEscolhaTipoOpen(true)}
               >
                 Vincular Gabarito
               </button>
-              {pastaAtual !== null && (
+              {/* TIPO 1 - DESATIVADO: Botão para adicionar simulado PDF */}
+              {/* {pastaAtual !== null && (
                 <button
                   onClick={() => setIsModalSimuladoOpen(true)}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
                 >
                   Novo Simulado
                 </button>
-              )}
+              )} */}
               {/* Botão "Adicionar Resultado" temporariamente ocultado 
               <button
                 onClick={() => setIsModalResultadoOpen(true)}
@@ -1971,7 +2040,59 @@ export default function Simulados() {
               </div>
             ))}
 
-            {simulados.map((simulado) => (
+            {/* TIPO 2: Renderização de simulados digitais */}
+            {simuladosDigitais.map((simulado) => (
+              <div
+                key={simulado.id}
+                className="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition-colors relative group"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <DocumentCheckIcon className="h-6 w-6 text-green-500" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">
+                        Simulado {simulado.mes} {simulado.ano}
+                      </h3>
+                      <p className="text-sm text-gray-400">
+                        {simulado.questoes_count} questões
+                      </p>
+                    </div>
+                  </div>
+                  {userType?.toLowerCase() === 'admin' && (
+                    <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
+                        className="p-2 text-blue-500 hover:text-blue-400 transition-colors"
+                        title="Ver detalhes"
+                      >
+                        <PencilIcon className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Tem certeza que deseja excluir este simulado?')) {
+                            // TODO: Implementar exclusão
+                          }
+                        }}
+                        className="p-2 text-red-500 hover:text-red-400 transition-colors"
+                        title="Excluir simulado"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                >
+                  <PlayCircleIcon className="w-5 h-5" />
+                  <span>Iniciar Simulado</span>
+                </button>
+              </div>
+            ))}
+
+            {/* TIPO 1 - DESATIVADO: Renderização de simulados PDF */}
+            {/* {simulados.map((simulado) => (
               <div
                 key={simulado.id}
                 className="bg-gray-800 rounded-lg p-6 relative"
@@ -2048,7 +2169,7 @@ export default function Simulados() {
                   </div>
                 </div>
               </div>
-            ))}
+            ))} */}
           </div>
         )}
       </main>
@@ -2255,8 +2376,8 @@ export default function Simulados() {
         </div>
       )}
       
-      {/* Modal de Gabaritos Vinculados */}
-      {isModalGabaritosVinculadosOpen && (
+      {/* TIPO 1 - DESATIVADO: Modal de Gabaritos Vinculados */}
+      {/* {isModalGabaritosVinculadosOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 p-5 rounded-lg w-full max-w-2xl mx-auto my-4 modal-compact">
             <div className="flex justify-between items-center mb-4">
@@ -2313,10 +2434,10 @@ export default function Simulados() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      {/* Modal de Novo Simulado */}
-      {isModalSimuladoOpen && (
+      {/* TIPO 1 - DESATIVADO: Modal de Novo Simulado PDF */}
+      {/* {isModalSimuladoOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 p-4 rounded-lg w-full max-w-lg mx-4">
             <h2 className="text-xl font-semibold text-white mb-3">Adicionar Novo Simulado</h2>
@@ -2469,10 +2590,10 @@ export default function Simulados() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
       
-      {/* Modal de Resolução em Vídeo */}
-      {isModalResolucaoOpen && simuladoSelecionado && (
+      {/* TIPO 1 - DESATIVADO: Modal de Resolução em Vídeo */}
+      {/* {isModalResolucaoOpen && simuladoSelecionado && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4">
           <div className="w-full max-w-4xl">
             <div className="flex justify-end mb-4">
@@ -2496,13 +2617,15 @@ export default function Simulados() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      {showPdfModal && selectedPdf && (
+      {/* TIPO 1 - DESATIVADO: Modal de visualização de PDF */}
+      {/* {showPdfModal && selectedPdf && (
         <PdfModal url={selectedPdf} onClose={() => setShowPdfModal(false)} />
-      )}
+      )} */}
 
-      {isModalResultadoOpen && (
+      {/* TIPO 1 - DESATIVADO: Modal de adicionar resultado (PDF) */}
+      {/* {isModalResultadoOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 rounded-lg max-w-2xl w-full">
             <div className="p-6">
@@ -2632,7 +2755,7 @@ export default function Simulados() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
       
       {/* Modal Ver Resultado */}
       {isModalVerResultadoOpen && (
@@ -3001,11 +3124,12 @@ export default function Simulados() {
                 required
               >
                 <option value="">Selecione um simulado</option>
-                {simuladosDisponiveis.map((simulado) => (
+                {/* TIPO 1 - DESATIVADO: Lista de simulados PDF foi desativada */}
+                {/* {simuladosDisponiveis.map((simulado) => (
                   <option key={simulado.id} value={simulado.id}>
                     {simulado.titulo}
                   </option>
-                ))}
+                ))} */}
               </select>
             </div>
 
@@ -3556,8 +3680,8 @@ export default function Simulados() {
         </div>
       )}
       
-      {/* Modal de Edição de Simulado */}
-      {isModalEditSimuladoOpen && (
+      {/* TIPO 1 - DESATIVADO: Modal de Edição de Simulado PDF */}
+      {/* {isModalEditSimuladoOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 p-4 rounded-lg w-full max-w-lg mx-4">
             <h2 className="text-xl font-semibold text-white mb-3">Editar Simulado</h2>
@@ -3606,7 +3730,7 @@ export default function Simulados() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 }
