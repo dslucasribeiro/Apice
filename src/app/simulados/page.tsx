@@ -20,6 +20,7 @@ interface SimuladoDigital {
   pasta_id: number | null;
   created_at: string;
   questoes_count?: number;
+  video_resolucao?: string | null;
 }
 
 // TIPO 1 - DESATIVADO: Interface para simulados com PDFs
@@ -2081,13 +2082,44 @@ export default function Simulados() {
                     </div>
                   )}
                 </div>
-                <button
-                  onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                >
-                  <PlayCircleIcon className="w-5 h-5" />
-                  <span>Iniciar Simulado</span>
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <PlayCircleIcon className="w-5 h-5" />
+                    <span>Iniciar Simulado</span>
+                  </button>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      disabled
+                      className="bg-gray-700 text-gray-500 px-4 py-2 rounded-lg cursor-not-allowed flex items-center justify-center space-x-2"
+                      title="Funcionalidade em breve"
+                    >
+                      <DocumentCheckIcon className="w-5 h-5" />
+                      <span>Gabarito</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        if (simulado.video_resolucao) {
+                          window.open(simulado.video_resolucao, '_blank');
+                        }
+                      }}
+                      disabled={!simulado.video_resolucao}
+                      className={`px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors ${
+                        simulado.video_resolucao
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      }`}
+                      title={simulado.video_resolucao ? 'Assistir resolução' : 'Vídeo não disponível'}
+                    >
+                      <PlayCircleIcon className="w-5 h-5" />
+                      <span>Resolução</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
 
