@@ -135,6 +135,9 @@ export default function Perfil() {
     carregando: true
   });
 
+  // Estado para armazenar resumo de desempenho de múltiplos alunos (para admin)
+  const [resumosDesempenhoAlunos, setResumosDesempenhoAlunos] = useState<Record<number, ResumoDesempenho>>({});
+
   // Estado para o modal de desempenho do aluno (quando ele clica no painel)
   const [isModalDesempenhoAlunoOpen, setIsModalDesempenhoAlunoOpen] = useState(false);
   const [simuladosRespondidosAluno, setSimuladosRespondidosAluno] = useState<{id: string, titulo: string}[]>([]);
@@ -201,6 +204,134 @@ export default function Perfil() {
       console.error('Erro ao buscar usuários:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Função para buscar o resumo de desempenho de um aluno específico (para admin)
+  const buscarResumoDesempenhoAluno = async (alunoId: number) => {
+    try {
+      // Marcar como carregando para este aluno específico
+      setResumosDesempenhoAlunos(prev => ({
+        ...prev,
+        [alunoId]: {
+          totalSimulados: 0,
+          totalQuestoes: 0,
+          totalAcertos: 0,
+          percentualGeral: 0,
+          carregando: true
+        }
+      }));
+      
+      // Buscar todas as respostas do aluno
+      const { data: respostas, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id, alternativa_resposta')
+        .eq('aluno_id', alunoId);
+      
+      if (respostasError) {
+        console.error('Erro ao buscar respostas:', respostasError);
+        setResumosDesempenhoAlunos(prev => ({
+          ...prev,
+          [alunoId]: { ...prev[alunoId], carregando: false }
+        }));
+        return;
+      }
+      
+      if (!respostas || respostas.length === 0) {
+        setResumosDesempenhoAlunos(prev => ({
+          ...prev,
+          [alunoId]: {
+            totalSimulados: 0,
+            totalQuestoes: 0,
+            totalAcertos: 0,
+            percentualGeral: 0,
+            carregando: false
+          }
+        }));
+        return;
+      }
+      
+      // Buscar os IDs das questões respondidas
+      const questoesIds = respostas.map(r => r.questao_id);
+      
+      // Buscar as questões para saber a quais simulados pertencem
+      const { data: questoes, error: questoesError } = await supabase
+        .from('questoes')
+        .select('id, simuladoExistente_id, simulado_id')
+        .in('id', questoesIds);
+      
+      if (questoesError) {
+        console.error('Erro ao buscar questões:', questoesError);
+        setResumosDesempenhoAlunos(prev => ({
+          ...prev,
+          [alunoId]: { ...prev[alunoId], carregando: false }
+        }));
+        return;
+      }
+      
+      // Separar simulados antigos e digitais para contar corretamente
+      const simuladosAntigosIds = new Set(
+        questoes?.filter(q => q.simuladoExistente_id !== null).map(q => q.simuladoExistente_id) || []
+      );
+      
+      const simuladosDigitaisIds = new Set(
+        questoes?.filter(q => q.simulado_id !== null).map(q => q.simulado_id) || []
+      );
+      
+      // Total de simulados únicos (antigos + digitais)
+      const totalSimuladosUnicos = simuladosAntigosIds.size + simuladosDigitaisIds.size;
+      
+      // Buscar as alternativas corretas para as questões respondidas
+      const { data: alternativas, error: alternativasError } = await supabase
+        .from('alternativas')
+        .select('questao_id, letra')
+        .in('questao_id', questoesIds)
+        .eq('correta', true);
+      
+      if (alternativasError) {
+        console.error('Erro ao buscar alternativas:', alternativasError);
+        setResumosDesempenhoAlunos(prev => ({
+          ...prev,
+          [alunoId]: { ...prev[alunoId], carregando: false }
+        }));
+        return;
+      }
+      
+      // Criar mapa de alternativas corretas
+      const alternativasCorretas: { [key: string]: string } = {};
+      alternativas?.forEach(alt => {
+        alternativasCorretas[alt.questao_id] = alt.letra;
+      });
+      
+      // Calcular acertos
+      let acertos = 0;
+      respostas.forEach(resposta => {
+        const correta = alternativasCorretas[resposta.questao_id];
+        if (correta && resposta.alternativa_resposta?.toLowerCase() === correta.toLowerCase()) {
+          acertos++;
+        }
+      });
+      
+      const totalQuestoes = respostas.length;
+      const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
+      
+      setResumosDesempenhoAlunos(prev => ({
+        ...prev,
+        [alunoId]: {
+          totalSimulados: totalSimuladosUnicos,
+          totalQuestoes,
+          totalAcertos: acertos,
+          percentualGeral: percentual,
+          carregando: false
+        }
+      }));
+      
+    } catch (error) {
+      console.error('Erro ao buscar resumo de desempenho:', error);
+      setResumosDesempenhoAlunos(prev => ({
+        ...prev,
+        [alunoId]: { ...prev[alunoId], carregando: false }
+      }));
     }
   };
 
@@ -426,6 +557,13 @@ export default function Perfil() {
       if (error) throw error;
       
       setSearchResults(data || []);
+      
+      // Buscar resumo de desempenho para cada aluno encontrado (se for admin)
+      if (userType === 'Admin' && data) {
+        data.forEach(user => {
+          buscarResumoDesempenhoAluno(user.id);
+        });
+      }
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
       setSearchResults([]);
@@ -709,30 +847,55 @@ export default function Perfil() {
       const questoesIds = respostas.map(r => r.questao_id);
       const { data: questoes, error: questoesError } = await supabase
         .from('questoes')
-        .select('simuladoExistente_id')
+        .select('simuladoExistente_id, simulado_id')
         .in('id', questoesIds);
         
       if (questoesError) throw questoesError;
       
-      // Extrair IDs únicos de simulados
-      const simuladosIds = Array.from(new Set(questoes?.map(q => q.simuladoExistente_id) || []));
+      // Separar IDs de simulados antigos e digitais
+      const simuladosAntigosIds = Array.from(
+        new Set(questoes?.filter(q => q.simuladoExistente_id !== null).map(q => q.simuladoExistente_id) || [])
+      );
       
-      if (simuladosIds.length === 0) {
-        setSimuladosAluno([]);
-        return;
+      const simuladosDigitaisIds = Array.from(
+        new Set(questoes?.filter(q => q.simulado_id !== null).map(q => q.simulado_id) || [])
+      );
+      
+      const todosSimulados: {id: string, titulo: string}[] = [];
+      
+      // Buscar simulados antigos (se houver)
+      if (simuladosAntigosIds.length > 0) {
+        const { data: simuladosAntigos } = await supabase
+          .from('simulados')
+          .select('id, titulo')
+          .in('id', simuladosAntigosIds)
+          .order('titulo');
+        
+        if (simuladosAntigos) {
+          todosSimulados.push(...simuladosAntigos.map(s => ({ 
+            id: s.id.toString(), 
+            titulo: s.titulo 
+          })));
+        }
       }
       
-      // Buscar os detalhes dos simulados que o aluno respondeu
-      const { data: simulados, error: simuladosError } = await supabase
-        .from('simulados')
-        .select('id, titulo')
-        .in('id', simuladosIds)
-        .order('titulo');
+      // Buscar simulados digitais (se houver)
+      if (simuladosDigitaisIds.length > 0) {
+        const { data: simuladosDigitais } = await supabase
+          .from('simulados_criados')
+          .select('id, mes, ano')
+          .in('id', simuladosDigitaisIds);
         
-      if (simuladosError) throw simuladosError;
+        if (simuladosDigitais) {
+          todosSimulados.push(...simuladosDigitais.map(s => ({ 
+            id: s.id, 
+            titulo: `${s.mes} ${s.ano}` 
+          })));
+        }
+      }
       
       // Definir os simulados para o aluno
-      setSimuladosAluno(simulados || []);
+      setSimuladosAluno(todosSimulados);
     } catch (error) {
       console.error('Erro ao carregar simulados:', error);
       setSimuladosAluno([]);
@@ -743,6 +906,17 @@ export default function Perfil() {
   const visualizarDesempenhoAluno = async (alunoId: string, simuladoId: string) => {
     try {
       const supabase = createSupabaseClient();
+      
+      // Verificar se é simulado digital (UUID) ou antigo (número)
+      const isUUID = simuladoId.includes('-');
+      
+      if (isUUID) {
+        // Simulado digital - redirecionar para a página de resultado
+        window.location.href = `/simulados/digital/${simuladoId}/resultado`;
+        return;
+      }
+      
+      // Simulado antigo - continuar com a lógica existente
       const simuladoIdNumber = parseInt(simuladoId);
       
       // Definir o simuladoRespostaId para usar nas funções existentes
@@ -1090,9 +1264,9 @@ export default function Perfil() {
                   console.log('Botão clicado! User ID:', user.id);
                   abrirModalDesempenhoAluno(user.id);
                 }}
-                disabled={resumoDesempenho.carregando}
+                disabled={(resumosDesempenhoAlunos[user.id]?.carregando ?? true)}
                 className={`bg-gradient-to-br from-blue-800/50 to-blue-900/50 rounded-lg p-3 min-w-[140px] sm:min-w-[160px] transition-all border border-transparent ${
-                  resumoDesempenho.carregando
+                  (resumosDesempenhoAlunos[user.id]?.carregando ?? true)
                     ? 'cursor-not-allowed opacity-60'
                     : 'hover:from-blue-700/50 hover:to-blue-800/50 cursor-pointer hover:border-blue-500/50'
                 }`}
@@ -1101,11 +1275,11 @@ export default function Perfil() {
                   <ChartBarIcon className="h-4 w-4 text-blue-400" />
                   <span className="text-xs font-semibold text-blue-400">Desempenho</span>
                 </div>
-                {resumoDesempenho.carregando ? (
+                {(resumosDesempenhoAlunos[user.id]?.carregando ?? true) ? (
                   <div className="flex items-center justify-center h-16">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
                   </div>
-                ) : resumoDesempenho.totalSimulados === 0 ? (
+                ) : (resumosDesempenhoAlunos[user.id]?.totalSimulados ?? 0) === 0 ? (
                   <div className="text-center py-2">
                     <p className="text-xs text-gray-400">Nenhum simulado</p>
                     <p className="text-xs text-gray-400">respondido</p>
@@ -1114,19 +1288,19 @@ export default function Perfil() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-center">
                       <span className={`text-2xl font-bold ${
-                        resumoDesempenho.percentualGeral >= 70 ? 'text-green-400' :
-                        resumoDesempenho.percentualGeral >= 50 ? 'text-yellow-400' :
+                        (resumosDesempenhoAlunos[user.id]?.percentualGeral ?? 0) >= 70 ? 'text-green-400' :
+                        (resumosDesempenhoAlunos[user.id]?.percentualGeral ?? 0) >= 50 ? 'text-yellow-400' :
                         'text-red-400'
                       }`}>
-                        {resumoDesempenho.percentualGeral}%
+                        {resumosDesempenhoAlunos[user.id]?.percentualGeral ?? 0}%
                       </span>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-300">
-                        {resumoDesempenho.totalAcertos}/{resumoDesempenho.totalQuestoes} acertos
+                        {resumosDesempenhoAlunos[user.id]?.totalAcertos ?? 0}/{resumosDesempenhoAlunos[user.id]?.totalQuestoes ?? 0} acertos
                       </p>
                       <p className="text-xs text-gray-400">
-                        {resumoDesempenho.totalSimulados} simulado{resumoDesempenho.totalSimulados > 1 ? 's' : ''}
+                        {resumosDesempenhoAlunos[user.id]?.totalSimulados ?? 0} simulado{(resumosDesempenhoAlunos[user.id]?.totalSimulados ?? 0) > 1 ? 's' : ''}
                       </p>
                     </div>
                     <p className="text-xs text-blue-400 mt-1">Clique para detalhes</p>
