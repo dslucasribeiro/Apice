@@ -238,7 +238,7 @@ export default function Perfil() {
       // Buscar as questões para saber a quais simulados pertencem
       const { data: questoes, error: questoesError } = await supabase
         .from('questoes')
-        .select('id, simuladoExistente_id')
+        .select('id, simuladoExistente_id, simulado_id')
         .in('id', questoesIds);
       
       if (questoesError) {
@@ -247,8 +247,17 @@ export default function Perfil() {
         return;
       }
       
-      // Contar simulados únicos
-      const simuladosUnicos = new Set(questoes?.map(q => q.simuladoExistente_id) || []);
+      // Separar simulados antigos e digitais para contar corretamente
+      const simuladosAntigosIds = new Set(
+        questoes?.filter(q => q.simuladoExistente_id !== null).map(q => q.simuladoExistente_id) || []
+      );
+      
+      const simuladosDigitaisIds = new Set(
+        questoes?.filter(q => q.simulado_id !== null).map(q => q.simulado_id) || []
+      );
+      
+      // Total de simulados únicos (antigos + digitais)
+      const totalSimuladosUnicos = simuladosAntigosIds.size + simuladosDigitaisIds.size;
       
       // Buscar as alternativas corretas para as questões respondidas
       const { data: alternativas, error: alternativasError } = await supabase
@@ -282,7 +291,7 @@ export default function Perfil() {
       const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 100) : 0;
       
       setResumoDesempenho({
-        totalSimulados: simuladosUnicos.size,
+        totalSimulados: totalSimuladosUnicos,
         totalQuestoes,
         totalAcertos: acertos,
         percentualGeral: percentual,
@@ -298,37 +307,79 @@ export default function Perfil() {
   // Função para abrir o modal de desempenho do aluno e buscar simulados respondidos
   const abrirModalDesempenhoAluno = async (alunoId: number) => {
     try {
-      console.log('Abrindo modal de desempenho para aluno:', alunoId);
-      
-      // Buscar simulados respondidos diretamente da tabela simulados_respondidos
+      // Buscar simulados antigos (PDF) respondidos
       const { data: simuladosRespondidos, error: simuladosRespondidosError } = await supabase
         .from('simulados_respondidos')
         .select('simulado_id')
         .eq('aluno_id', alunoId)
         .eq('respondido', true);
       
-      console.log('Simulados respondidos encontrados:', simuladosRespondidos);
+      // Buscar simulados digitais respondidos (via respostas_alunos)
+      const { data: respostasAluno, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id')
+        .eq('aluno_id', alunoId);
       
-      if (simuladosRespondidosError || !simuladosRespondidos || simuladosRespondidos.length === 0) {
+      let simuladosDigitaisIds: string[] = [];
+      
+      if (respostasAluno && respostasAluno.length > 0) {
+        const questoesIds = respostasAluno.map(r => r.questao_id);
+        const { data: questoes } = await supabase
+          .from('questoes')
+          .select('simulado_id')
+          .in('id', questoesIds)
+          .not('simulado_id', 'is', null);
+        
+        if (questoes && questoes.length > 0) {
+          simuladosDigitaisIds = Array.from(new Set(questoes.map(q => q.simulado_id).filter(id => id !== null))) as string[];
+        }
+      }
+      
+      // Verificar se há algum simulado respondido
+      const temSimuladosAntigos = simuladosRespondidos && simuladosRespondidos.length > 0;
+      const temSimuladosDigitais = simuladosDigitaisIds.length > 0;
+      
+      if (!temSimuladosAntigos && !temSimuladosDigitais) {
         alert('Você ainda não respondeu nenhum simulado.');
         return;
       }
       
-      // Pegar IDs únicos de simulados
-      const simuladosIds = Array.from(new Set(simuladosRespondidos.map(sr => sr.simulado_id)));
+      const todosSimulados: {id: string, titulo: string, tipo: 'antigo' | 'digital'}[] = [];
       
-      // Buscar os títulos dos simulados na tabela simulados
-      const { data: simulados, error: simuladosError } = await supabase
-        .from('simulados')
-        .select('id, titulo')
-        .in('id', simuladosIds);
-      
-      if (simuladosError || !simulados) {
-        console.error('Erro ao buscar simulados:', simuladosError);
-        return;
+      // Buscar títulos dos simulados antigos
+      if (temSimuladosAntigos) {
+        const simuladosIds = Array.from(new Set(simuladosRespondidos.map(sr => sr.simulado_id)));
+        const { data: simulados } = await supabase
+          .from('simulados')
+          .select('id, titulo')
+          .in('id', simuladosIds);
+        
+        if (simulados) {
+          todosSimulados.push(...simulados.map(s => ({ 
+            id: s.id.toString(), 
+            titulo: s.titulo,
+            tipo: 'antigo' as const
+          })));
+        }
       }
       
-      setSimuladosRespondidosAluno(simulados.map(s => ({ id: s.id.toString(), titulo: s.titulo })));
+      // Buscar títulos dos simulados digitais
+      if (temSimuladosDigitais) {
+        const { data: simuladosDigitais } = await supabase
+          .from('simulados_criados')
+          .select('id, mes, ano')
+          .in('id', simuladosDigitaisIds);
+        
+        if (simuladosDigitais) {
+          todosSimulados.push(...simuladosDigitais.map(s => ({ 
+            id: s.id, 
+            titulo: `${s.mes} ${s.ano}`,
+            tipo: 'digital' as const
+          })));
+        }
+      }
+      
+      setSimuladosRespondidosAluno(todosSimulados);
       setSimuladoSelecionadoAluno('');
       setIsModalDesempenhoAlunoOpen(true);
       
@@ -341,9 +392,17 @@ export default function Perfil() {
   const visualizarMeuDesempenho = async (simuladoId: string) => {
     if (!users[0]) return;
     
-    // Reutilizar a função existente, passando o ID do aluno logado
-    await visualizarDesempenhoAluno(users[0].id.toString(), simuladoId);
-    setIsModalDesempenhoAlunoOpen(false);
+    // Verificar se é um simulado digital (UUID) ou antigo (número)
+    const isUUID = simuladoId.includes('-');
+    
+    if (isUUID) {
+      // Simulado digital - redirecionar para a página de resultado
+      window.location.href = `/simulados/digital/${simuladoId}/resultado`;
+    } else {
+      // Simulado antigo - usar a função existente
+      await visualizarDesempenhoAluno(users[0].id.toString(), simuladoId);
+      setIsModalDesempenhoAlunoOpen(false);
+    }
   };
 
   // Buscar todos os usuários que correspondem ao termo de busca
