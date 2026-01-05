@@ -709,6 +709,68 @@ export default function Simulados() {
     }
   };
 
+  const handleDeleteSimulado = async (simuladoId: string) => {
+    if (userType?.toLowerCase() !== 'admin') return;
+
+    if (!confirm('Tem certeza que deseja excluir este simulado? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    const supabase = createSupabaseClient();
+    try {
+      // Buscar todas as questões do simulado
+      const { data: questoes, error: questoesError } = await supabase
+        .from('questoes')
+        .select('id')
+        .eq('simulado_id', simuladoId);
+
+      if (questoesError) throw questoesError;
+
+      if (questoes && questoes.length > 0) {
+        const questoesIds = questoes.map(q => q.id);
+
+        // Deletar respostas dos alunos
+        const { error: respostasError } = await supabase
+          .from('respostas_alunos')
+          .delete()
+          .in('questao_id', questoesIds);
+
+        if (respostasError) throw respostasError;
+
+        // Deletar alternativas
+        const { error: alternativasError } = await supabase
+          .from('alternativas')
+          .delete()
+          .in('questao_id', questoesIds);
+
+        if (alternativasError) throw alternativasError;
+
+        // Deletar questões
+        const { error: questoesDeleteError } = await supabase
+          .from('questoes')
+          .delete()
+          .eq('simulado_id', simuladoId);
+
+        if (questoesDeleteError) throw questoesDeleteError;
+      }
+
+      // Deletar o simulado
+      const { error: simuladoError } = await supabase
+        .from('simulados_criados')
+        .delete()
+        .eq('id', simuladoId);
+
+      if (simuladoError) throw simuladoError;
+
+      // Atualizar a lista de simulados
+      setSimuladosDigitais(simuladosDigitais.filter(s => s.id !== simuladoId));
+      alert('Simulado excluído com sucesso!');
+    } catch (error) {
+      console.error('Erro ao excluir simulado:', error);
+      alert('Erro ao excluir simulado. Por favor, tente novamente.');
+    }
+  };
+
   const handleDeletePasta = async (pastaId: number) => {
     if (userType?.toLowerCase() !== 'admin') return;
 
@@ -2102,11 +2164,7 @@ export default function Simulados() {
                         <PencilIcon className="w-5 h-5" />
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm('Tem certeza que deseja excluir este simulado?')) {
-                            // TODO: Implementar exclusão
-                          }
-                        }}
+                        onClick={() => handleDeleteSimulado(simulado.id)}
                         className="p-2 text-red-500 hover:text-red-400 transition-colors"
                         title="Excluir simulado"
                       >
