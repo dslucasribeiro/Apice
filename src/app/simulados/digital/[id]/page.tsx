@@ -10,6 +10,7 @@ interface Alternativa {
   letra: string;
   texto: string;
   correta: boolean;
+  imagem_url?: string | null;
 }
 
 interface Questao {
@@ -282,7 +283,18 @@ export default function SimuladoDigitalPage() {
                   <span className="font-bold text-lg">
                     {alternativa.letra.toUpperCase()})
                   </span>
-                  <span className="flex-1">{alternativa.texto}</span>
+                  <div className="flex-1">
+                    <span>{alternativa.texto}</span>
+                    {alternativa.imagem_url && (
+                      <div className="mt-3">
+                        <img
+                          src={alternativa.imagem_url}
+                          alt={`Imagem alternativa ${alternativa.letra}`}
+                          className="max-w-full max-h-48 rounded border border-gray-600"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </button>
             ))}

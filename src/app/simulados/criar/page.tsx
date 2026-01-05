@@ -11,6 +11,7 @@ interface Alternativa {
   letra: string;
   texto: string;
   correta: boolean;
+  imagem_url?: string;
 }
 
 interface Questao {
@@ -48,6 +49,8 @@ export default function CriarSimulado() {
   const [imagemPreview, setImagemPreview] = useState<string | null>(null);
   const [uploadingImagem, setUploadingImagem] = useState(false);
   const [questaoEditandoIndex, setQuestaoEditandoIndex] = useState<number | null>(null);
+  const [imagensAlternativas, setImagensAlternativas] = useState<{[key: string]: File}>({});
+  const [imagensAlternativasPreview, setImagensAlternativasPreview] = useState<{[key: string]: string}>({});
   const [questaoAtual, setQuestaoAtual] = useState({
     enunciado: '',
     assunto: '',
@@ -156,6 +159,44 @@ export default function CriarSimulado() {
     setImagemPreview(null);
   };
 
+  const handleImagemAlternativaChange = (letra: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert('Por favor, selecione apenas arquivos de imagem.');
+        return;
+      }
+      
+      if (file.size > 5 * 1024 * 1024) {
+        alert('A imagem deve ter no máximo 5MB.');
+        return;
+      }
+      
+      setImagensAlternativas({
+        ...imagensAlternativas,
+        [letra]: file
+      });
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagensAlternativasPreview({
+          ...imagensAlternativasPreview,
+          [letra]: reader.result as string
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removerImagemAlternativa = (letra: string) => {
+    const novasImagens = { ...imagensAlternativas };
+    const novasPreviews = { ...imagensAlternativasPreview };
+    delete novasImagens[letra];
+    delete novasPreviews[letra];
+    setImagensAlternativas(novasImagens);
+    setImagensAlternativasPreview(novasPreviews);
+  };
+
   const adicionarQuestao = async () => {
     if (!questaoAtual.alternativas.some(alt => alt.correta)) {
       alert('Selecione uma alternativa correta.');
@@ -167,8 +208,13 @@ export default function CriarSimulado() {
       return;
     }
     
-    if (questaoAtual.alternativas.some(alt => !alt.texto.trim())) {
-      alert('Preencha todas as alternativas.');
+    // Validar que cada alternativa tem texto OU imagem
+    const alternativasInvalidas = questaoAtual.alternativas.filter(alt => 
+      !alt.texto.trim() && !imagensAlternativasPreview[alt.letra]
+    );
+    
+    if (alternativasInvalidas.length > 0) {
+      alert('Cada alternativa precisa ter texto ou imagem.');
       return;
     }
 
@@ -201,6 +247,44 @@ export default function CriarSimulado() {
         setUploadingImagem(false);
       }
     }
+
+    // Upload de imagens das alternativas
+    const alternativasComImagens = await Promise.all(
+      questaoAtual.alternativas.map(async (alt) => {
+        let imagemAltUrl = undefined;
+        
+        if (imagensAlternativas[alt.letra]) {
+          try {
+            const supabase = createSupabaseClient();
+            const file = imagensAlternativas[alt.letra];
+            const fileExt = file.name.split('.').pop();
+            const fileName = `alt_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('questoes-imagens')
+              .upload(fileName, file, {
+                cacheControl: '3600',
+                upsert: false
+              });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('questoes-imagens')
+              .getPublicUrl(uploadData.path);
+
+            imagemAltUrl = publicUrl;
+          } catch (error: any) {
+            console.error(`Erro ao fazer upload da imagem da alternativa ${alt.letra}:`, error);
+          }
+        }
+        
+        return {
+          ...alt,
+          imagem_url: imagemAltUrl
+        };
+      })
+    );
     
     setQuestoes([
       ...questoes,
@@ -210,7 +294,7 @@ export default function CriarSimulado() {
         imagem_url: imagemUrl || undefined,
         assunto: questaoAtual.assunto,
         dificuldade: questaoAtual.dificuldade,
-        alternativas: questaoAtual.alternativas
+        alternativas: alternativasComImagens
       }
     ]);
     
@@ -225,6 +309,8 @@ export default function CriarSimulado() {
     
     setImagemQuestao(null);
     setImagemPreview(null);
+    setImagensAlternativas({});
+    setImagensAlternativasPreview({});
   };
 
   const removerQuestao = (index: number) => {
@@ -249,6 +335,15 @@ export default function CriarSimulado() {
     if (questao.imagem_url) {
       setImagemPreview(questao.imagem_url);
     }
+
+    // Carregar previews das imagens das alternativas existentes
+    const previews: {[key: string]: string} = {};
+    questao.alternativas.forEach(alt => {
+      if (alt.imagem_url) {
+        previews[alt.letra] = alt.imagem_url;
+      }
+    });
+    setImagensAlternativasPreview(previews);
     
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
@@ -265,6 +360,8 @@ export default function CriarSimulado() {
     });
     setImagemQuestao(null);
     setImagemPreview(null);
+    setImagensAlternativas({});
+    setImagensAlternativasPreview({});
   };
 
   const salvarEdicaoQuestao = async () => {
@@ -278,8 +375,13 @@ export default function CriarSimulado() {
       return;
     }
     
-    if (questaoAtual.alternativas.some(alt => !alt.texto.trim())) {
-      alert('Preencha todas as alternativas.');
+    // Validar que cada alternativa tem texto OU imagem
+    const alternativasInvalidas = questaoAtual.alternativas.filter(alt => 
+      !alt.texto.trim() && !imagensAlternativasPreview[alt.letra]
+    );
+    
+    if (alternativasInvalidas.length > 0) {
+      alert('Cada alternativa precisa ter texto ou imagem.');
       return;
     }
 
@@ -312,6 +414,48 @@ export default function CriarSimulado() {
         setUploadingImagem(false);
       }
     }
+
+    // Upload de imagens das alternativas na edição
+    const alternativasComImagens = await Promise.all(
+      questaoAtual.alternativas.map(async (alt) => {
+        // Manter imagem existente se não houver nova
+        const questaoOriginal = questoes[questaoEditandoIndex!];
+        const altOriginal = questaoOriginal.alternativas.find(a => a.letra === alt.letra);
+        let imagemAltUrl = altOriginal?.imagem_url;
+        
+        // Se houver nova imagem, fazer upload
+        if (imagensAlternativas[alt.letra]) {
+          try {
+            const supabase = createSupabaseClient();
+            const file = imagensAlternativas[alt.letra];
+            const fileExt = file.name.split('.').pop();
+            const fileName = `alt_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('questoes-imagens')
+              .upload(fileName, file, {
+                cacheControl: '3600',
+                upsert: false
+              });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('questoes-imagens')
+              .getPublicUrl(uploadData.path);
+
+            imagemAltUrl = publicUrl;
+          } catch (error: any) {
+            console.error(`Erro ao fazer upload da imagem da alternativa ${alt.letra}:`, error);
+          }
+        }
+        
+        return {
+          ...alt,
+          imagem_url: imagemAltUrl
+        };
+      })
+    );
     
     const novasQuestoes = [...questoes];
     novasQuestoes[questaoEditandoIndex!] = {
@@ -320,7 +464,7 @@ export default function CriarSimulado() {
       imagem_url: imagemUrl,
       assunto: questaoAtual.assunto,
       dificuldade: questaoAtual.dificuldade,
-      alternativas: questaoAtual.alternativas
+      alternativas: alternativasComImagens
     };
     
     setQuestoes(novasQuestoes);
@@ -384,7 +528,8 @@ export default function CriarSimulado() {
           questao_id: questaoData.id,
           letra: alt.letra,
           texto: alt.texto,
-          correta: alt.correta
+          correta: alt.correta,
+          imagem_url: alt.imagem_url || null
         }));
 
         const { error: alternativasError } = await supabase
@@ -647,43 +792,84 @@ export default function CriarSimulado() {
                   </div>
                   <div className="space-y-3">
                     {questaoAtual.alternativas.map((alternativa, index) => (
-                      <div key={index} className="flex items-start space-x-3 bg-gray-700 p-3 rounded-lg">
-                        <div className="flex items-center mt-2 space-x-2">
-                          <span className="text-gray-300 font-medium w-6">{alternativa.letra.toUpperCase()})</span>
-                          <input
-                            type="radio"
-                            name="alternativa-correta"
-                            checked={alternativa.correta}
-                            onChange={() => {
-                              const novasAlternativas = questaoAtual.alternativas.map((alt, i) => ({
-                                ...alt,
-                                correta: i === index
-                              }));
-                              setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
-                            }}
-                            className="w-4 h-4 text-blue-600 bg-gray-600 border-gray-500 focus:ring-blue-500"
-                          />
+                      <div key={index} className="bg-gray-700 p-3 rounded-lg">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex items-center mt-2 space-x-2">
+                            <span className="text-gray-300 font-medium w-6">{alternativa.letra.toUpperCase()})</span>
+                            <input
+                              type="radio"
+                              name="alternativa-correta"
+                              checked={alternativa.correta}
+                              onChange={() => {
+                                const novasAlternativas = questaoAtual.alternativas.map((alt, i) => ({
+                                  ...alt,
+                                  correta: i === index
+                                }));
+                                setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
+                              }}
+                              className="w-4 h-4 text-blue-600 bg-gray-600 border-gray-500 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <textarea
+                              value={alternativa.texto}
+                              onChange={(e) => {
+                                const novasAlternativas = [...questaoAtual.alternativas];
+                                novasAlternativas[index].texto = e.target.value;
+                                setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
+                              }}
+                              className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:border-blue-500"
+                              rows={2}
+                              placeholder={`Digite o texto da alternativa ${alternativa.letra.toUpperCase()}...`}
+                            />
+                            
+                            {/* Preview da imagem da alternativa */}
+                            {imagensAlternativasPreview[alternativa.letra] && (
+                              <div className="mt-2 relative inline-block">
+                                <img
+                                  src={imagensAlternativasPreview[alternativa.letra]}
+                                  alt={`Imagem alternativa ${alternativa.letra}`}
+                                  className="max-w-xs max-h-32 rounded border border-gray-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removerImagemAlternativa(alternativa.letra)}
+                                  className="absolute -top-2 -right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1"
+                                  title="Remover imagem"
+                                >
+                                  <TrashIcon className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 mt-2">
+                            {/* Botão sutil para adicionar imagem */}
+                            <label
+                              className="cursor-pointer text-gray-400 hover:text-blue-400 transition-colors"
+                              title="Adicionar imagem à alternativa"
+                            >
+                              <PhotoIcon className="w-5 h-5" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handleImagemAlternativaChange(alternativa.letra, e)}
+                                className="hidden"
+                              />
+                            </label>
+                            
+                            {questaoAtual.alternativas.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removerAlternativa(index)}
+                                className="text-red-500 hover:text-red-400 transition-colors"
+                                title="Remover alternativa"
+                              >
+                                <TrashIcon className="w-5 h-5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <textarea
-                          value={alternativa.texto}
-                          onChange={(e) => {
-                            const novasAlternativas = [...questaoAtual.alternativas];
-                            novasAlternativas[index].texto = e.target.value;
-                            setQuestaoAtual({...questaoAtual, alternativas: novasAlternativas});
-                          }}
-                          className="flex-1 px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:border-blue-500"
-                          rows={2}
-                          placeholder={`Digite o texto da alternativa ${alternativa.letra.toUpperCase()}...`}
-                        />
-                        {questaoAtual.alternativas.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removerAlternativa(index)}
-                            className="mt-2 text-red-500 hover:text-red-400 transition-colors"
-                          >
-                            <TrashIcon className="w-5 h-5" />
-                          </button>
-                        )}
                       </div>
                     ))}
                   </div>

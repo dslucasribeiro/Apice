@@ -257,6 +257,7 @@ export default function Simulados() {
 
   // Adicionando estado para controlar quais simulados o aluno já respondeu
   const [simuladosRespondidos, setSimuladosRespondidos] = useState<number[]>([]);
+  const [simuladosDigitaisRespondidos, setSimuladosDigitaisRespondidos] = useState<string[]>([]);
 
   useEffect(() => {
     fetchUserType();
@@ -1221,7 +1222,7 @@ export default function Simulados() {
       
       const alunoId = userData.id;
       
-      // Buscar simulados respondidos da nova tabela
+      // Buscar simulados respondidos da tabela antiga (simulados_respondidos)
       const { data: simuladosData, error: simuladosError } = await supabase
         .from('simulados_respondidos')
         .select('simulado_id')
@@ -1230,15 +1231,47 @@ export default function Simulados() {
       
       if (simuladosError) {
         console.error('Erro ao buscar simulados respondidos:', simuladosError);
-        return;
-      }
-      
-      if (simuladosData && simuladosData.length > 0) {
-        // Extrair os IDs dos simulados respondidos
+      } else if (simuladosData && simuladosData.length > 0) {
         const simuladosIds = simuladosData.map(item => item.simulado_id);
         setSimuladosRespondidos(simuladosIds);
       } else {
         setSimuladosRespondidos([]);
+      }
+
+      // Buscar simulados digitais respondidos (verificar respostas_alunos)
+      const { data: respostasAluno, error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .select('questao_id')
+        .eq('aluno_id', alunoId);
+      
+      if (respostasError) {
+        console.error('Erro ao buscar respostas do aluno:', respostasError);
+        return;
+      }
+
+      if (respostasAluno && respostasAluno.length > 0) {
+        // Buscar as questões para obter os IDs dos simulados
+        const questoesIds = respostasAluno.map(r => r.questao_id);
+        const { data: questoes, error: questoesError } = await supabase
+          .from('questoes')
+          .select('simulado_id')
+          .in('id', questoesIds)
+          .not('simulado_id', 'is', null);
+        
+        if (questoesError) {
+          console.error('Erro ao buscar questões:', questoesError);
+          return;
+        }
+
+        if (questoes && questoes.length > 0) {
+          // Extrair IDs únicos de simulados digitais
+          const simuladosDigitaisIds = Array.from(new Set(questoes.map(q => q.simulado_id).filter(id => id !== null)));
+          setSimuladosDigitaisRespondidos(simuladosDigitaisIds as string[]);
+        } else {
+          setSimuladosDigitaisRespondidos([]);
+        }
+      } else {
+        setSimuladosDigitaisRespondidos([]);
       }
     } catch (error) {
       console.error('Erro ao carregar simulados respondidos:', error);
@@ -2083,13 +2116,23 @@ export default function Simulados() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <button
-                    onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <PlayCircleIcon className="w-5 h-5" />
-                    <span>Iniciar Simulado</span>
-                  </button>
+                  {simuladosDigitaisRespondidos.includes(simulado.id) ? (
+                    <button
+                      onClick={() => window.location.href = `/simulados/digital/${simulado.id}/resultado`}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <DocumentCheckIcon className="w-5 h-5" />
+                      <span>Desempenho</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <PlayCircleIcon className="w-5 h-5" />
+                      <span>Iniciar Simulado</span>
+                    </button>
+                  )}
                   
                   <div className="grid grid-cols-2 gap-2">
                     <button
