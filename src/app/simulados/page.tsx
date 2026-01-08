@@ -2021,32 +2021,23 @@ export default function Simulados() {
                 Nova Pasta
               </button>
               <button
+                onClick={() => window.location.href = '/assuntos'}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md"
+              >
+                Gerenciar Assuntos
+              </button>
+              <button
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
                 onClick={() => window.location.href = '/simulados/criar'}
               >
-                Novo Simulado Digital
+                Novo Simulado Interno
               </button>
+              {/* Botão Vincular Gabarito temporariamente desativado
               <button
                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md"
                 onClick={() => setIsModalEscolhaTipoOpen(true)}
               >
                 Vincular Gabarito
-              </button>
-              {/* TIPO 1 - DESATIVADO: Botão para adicionar simulado PDF */}
-              {/* {pastaAtual !== null && (
-                <button
-                  onClick={() => setIsModalSimuladoOpen(true)}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
-                >
-                  Novo Simulado
-                </button>
-              )} */}
-              {/* Botão "Adicionar Resultado" temporariamente ocultado 
-              <button
-                onClick={() => setIsModalResultadoOpen(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md"
-              >
-                Adicionar Resultado
               </button>
               */}
             </div>
