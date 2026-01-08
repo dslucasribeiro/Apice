@@ -34,6 +34,14 @@ interface Pasta {
   updated_at: string;
 }
 
+type Assunto = {
+  id: number;
+  nome: string;
+  categoria: string | null;
+  ordem: number;
+  ativo: boolean;
+};
+
 export default function CriarSimulado() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +51,7 @@ export default function CriarSimulado() {
   const [novoSimuladoAno, setNovoSimuladoAno] = useState(new Date().getFullYear());
   const [pastaIdSelecionada, setPastaIdSelecionada] = useState<number | null>(null);
   const [pastas, setPastas] = useState<Pasta[]>([]);
+  const [assuntos, setAssuntos] = useState<Assunto[]>([]);
   
   const [questoes, setQuestoes] = useState<Questao[]>([]);
   const [imagemQuestao, setImagemQuestao] = useState<File | null>(null);
@@ -63,6 +72,7 @@ export default function CriarSimulado() {
   useEffect(() => {
     verificarPermissao();
     carregarPastas();
+    carregarAssuntos();
   }, []);
 
   const verificarPermissao = async () => {
@@ -98,6 +108,20 @@ export default function CriarSimulado() {
 
     if (!error && data) {
       setPastas(data);
+    }
+  };
+
+  const carregarAssuntos = async () => {
+    const supabase = createSupabaseClient();
+    const { data, error } = await supabase
+      .from('assuntos')
+      .select('*')
+      .eq('ativo', true)
+      .order('categoria', { ascending: true })
+      .order('ordem', { ascending: true });
+
+    if (!error && data) {
+      setAssuntos(data);
     }
   };
 
@@ -573,7 +597,7 @@ export default function CriarSimulado() {
               <ArrowLeftIcon className="w-5 h-5" />
               <span>Voltar</span>
             </button>
-            <h1 className="text-3xl font-bold">Criar Novo Simulado Digital</h1>
+            <h1 className="text-3xl font-bold">Criar Novo Simulado Interno</h1>
           </div>
         </div>
 
@@ -751,13 +775,31 @@ export default function CriarSimulado() {
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Assunto *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={questaoAtual.assunto}
                       onChange={(e) => setQuestaoAtual({...questaoAtual, assunto: e.target.value})}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="Ex: Matemática, Física, Português..."
-                    />
+                      required
+                    >
+                      <option value="">Selecione um assunto</option>
+                      {assuntos.reduce((acc, assunto) => {
+                        const categoria = assunto.categoria || 'Sem Categoria';
+                        if (!acc.find((item: any) => item.categoria === categoria)) {
+                          acc.push({ categoria, assuntos: [] });
+                        }
+                        const categoriaIndex = acc.findIndex((item: any) => item.categoria === categoria);
+                        acc[categoriaIndex].assuntos.push(assunto);
+                        return acc;
+                      }, [] as Array<{categoria: string, assuntos: Assunto[]}>).map((grupo) => (
+                        <optgroup key={grupo.categoria} label={grupo.categoria}>
+                          {grupo.assuntos.map((assunto) => (
+                            <option key={assunto.id} value={assunto.nome}>
+                              {assunto.nome}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
                   </div>
                   
                   <div>
