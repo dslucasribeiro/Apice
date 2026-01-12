@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { createSupabaseClient } from '@/lib/supabase';
 import type { User } from '@/types/user';
 import Navigation from '@/components/Navigation';
 import DatePicker, { registerLocale } from "react-datepicker";
@@ -25,6 +26,7 @@ export default function Alunos() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [newUser, setNewUser] = useState({
     nome: '',
     cpf: '',
@@ -42,8 +44,7 @@ export default function Alunos() {
 
   useEffect(() => {
     fetchUsers();
-    const userType = localStorage.getItem('userType');
-    setIsAdmin(userType === 'Admin');
+    checkIfAdmin();
   }, []);
 
   const getCurrentUser = async () => {
@@ -61,14 +62,15 @@ export default function Alunos() {
 
   const checkIfAdmin = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseClient = createSupabaseClient();
+      const { data: { session } } = await supabaseClient.auth.getSession();
       if (session?.user?.id) {
-        const { data: currentUser } = await supabase
+        const { data: currentUser, error } = await supabaseClient
           .from('usuarios')
           .select('tipo')
           .eq('user_id', session.user.id)
           .single();
-
+        
         setIsAdmin(currentUser?.tipo === 'Admin');
       }
     } catch (error) {
@@ -255,6 +257,11 @@ export default function Alunos() {
     }
   };
 
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedUsers([]); // Limpa seleções ao mudar de modo
+  };
+
   const handleSubmit = async () => {
     try {
       // Validar apenas nome e email
@@ -353,14 +360,29 @@ export default function Alunos() {
       <Navigation />
       <main className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6 space-x-4">
-          {/* Botão Toggle Admin/Alunos - Só aparece para admins */}
+          {/* Botões de controle - Só aparecem para admins */}
           {isAdmin && (
-            <button
-              onClick={() => setShowAdmins(!showAdmins)}
-              className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 flex items-center"
-            >
-              {showAdmins ? 'Alunos' : 'Administradores'}
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowAdmins(!showAdmins)}
+                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors duration-200 flex items-center"
+              >
+                {showAdmins ? 'Alunos' : 'Administradores'}
+              </button>
+              <button
+                onClick={toggleSelectionMode}
+                className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center space-x-2 ${
+                  selectionMode 
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                    : 'bg-gray-700 hover:bg-gray-600 text-white'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>{selectionMode ? 'Cancelar Seleção' : 'Selecionar Múltiplos'}</span>
+              </button>
+            </div>
           )}
           <div className="flex items-center space-x-4 ml-auto">
             {/* Contador de Usuários */}
@@ -428,7 +450,7 @@ export default function Alunos() {
         </div>
 
         {/* Botões de Ação para Seleção Múltipla */}
-        {selectedUsers.length > 0 && (
+        {selectionMode && selectedUsers.length > 0 && (
           <div className="mb-4 flex items-center justify-between bg-blue-900 bg-opacity-50 px-4 py-3 rounded-lg">
             <span className="text-white font-medium">
               {selectedUsers.length} aluno(s) selecionado(s)
@@ -458,14 +480,16 @@ export default function Alunos() {
           <table className="min-w-full divide-y divide-gray-800">
             <thead className="bg-gray-800">
               <tr>
-                <th className="px-6 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={selectedUsers.length === currentUsers.length && currentUsers.length > 0}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                  />
-                </th>
+                {selectionMode && (
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.length === currentUsers.length && currentUsers.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nome</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">CPF</th>
@@ -479,14 +503,16 @@ export default function Alunos() {
             <tbody className="bg-gray-900 divide-y divide-gray-800">
               {currentUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-800 transition-colors duration-150">
-                  <td className="px-6 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.includes(user.id)}
-                      onChange={() => toggleSelectUser(user.id)}
-                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                  </td>
+                  {selectionMode && (
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.includes(user.id)}
+                        onChange={() => toggleSelectUser(user.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                    </td>
+                  )}
                   <td className="px-6 py-4 text-sm text-gray-300">{user.nome}</td>
                   <td className="px-6 py-4 text-sm text-gray-300">{user.email}</td>
                   <td className="px-6 py-4 text-sm text-gray-300">{formatCPF(user.cpf)}</td>
