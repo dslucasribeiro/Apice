@@ -771,46 +771,106 @@ export default function Simulados() {
     }
   };
 
+  const deletarSimuladoCompleto = async (simuladoId: string, supabase: any) => {
+    // Buscar todas as questões do simulado
+    const { data: questoes, error: questoesError } = await supabase
+      .from('questoes')
+      .select('id')
+      .eq('simulado_id', simuladoId);
+
+    if (questoesError) throw questoesError;
+
+    if (questoes && questoes.length > 0) {
+      const questoesIds = questoes.map((q: any) => q.id);
+
+      // Deletar respostas dos alunos
+      const { error: respostasError } = await supabase
+        .from('respostas_alunos')
+        .delete()
+        .in('questao_id', questoesIds);
+
+      if (respostasError) throw respostasError;
+
+      // Deletar alternativas
+      const { error: alternativasError } = await supabase
+        .from('alternativas')
+        .delete()
+        .in('questao_id', questoesIds);
+
+      if (alternativasError) throw alternativasError;
+
+      // Deletar questões
+      const { error: questoesDeleteError } = await supabase
+        .from('questoes')
+        .delete()
+        .eq('simulado_id', simuladoId);
+
+      if (questoesDeleteError) throw questoesDeleteError;
+    }
+
+    // Deletar o simulado
+    const { error: simuladoError } = await supabase
+      .from('simulados_criados')
+      .delete()
+      .eq('id', simuladoId);
+
+    if (simuladoError) throw simuladoError;
+  };
+
+  const deletarPastaSimuladosRecursivamente = async (pastaId: number, supabase: any): Promise<void> => {
+    // 1. Buscar todas as subpastas
+    const { data: subpastas, error: subpastasError } = await supabase
+      .from('simulado_pastas')
+      .select('id')
+      .eq('parent_id', pastaId);
+
+    if (subpastasError) throw subpastasError;
+
+    // 2. Deletar recursivamente todas as subpastas
+    if (subpastas && subpastas.length > 0) {
+      for (const subpasta of subpastas) {
+        await deletarPastaSimuladosRecursivamente(subpasta.id, supabase);
+      }
+    }
+
+    // 3. Buscar todos os simulados da pasta
+    const { data: simuladosPasta, error: simuladosError } = await supabase
+      .from('simulados_criados')
+      .select('id')
+      .eq('pasta_id', pastaId);
+
+    if (simuladosError) throw simuladosError;
+
+    // 4. Deletar todos os simulados e seus dados relacionados
+    if (simuladosPasta && simuladosPasta.length > 0) {
+      for (const simulado of simuladosPasta) {
+        await deletarSimuladoCompleto(simulado.id, supabase);
+      }
+    }
+
+    // 5. Finalmente, deletar a pasta
+    const { error: deletePastaError } = await supabase
+      .from('simulado_pastas')
+      .delete()
+      .eq('id', pastaId);
+
+    if (deletePastaError) throw deletePastaError;
+  };
+
   const handleDeletePasta = async (pastaId: number) => {
     if (userType?.toLowerCase() !== 'admin') return;
 
-    if (!confirm('Tem certeza que deseja excluir esta pasta? Esta ação não pode ser desfeita.')) {
+    if (!confirm('Tem certeza que deseja excluir esta pasta? ATENÇÃO: Todos os simulados e subpastas dentro dela também serão excluídos permanentemente!')) {
       return;
     }
 
     const supabase = createSupabaseClient();
     try {
-      // Primeiro, verificar se há subpastas
-      const { data: subpastas } = await supabase
-        .from('simulado_pastas')
-        .select('id')
-        .eq('parent_id', pastaId);
+      await deletarPastaSimuladosRecursivamente(pastaId, supabase);
 
-      if (subpastas && subpastas.length > 0) {
-        alert('Não é possível excluir esta pasta pois ela contém subpastas. Exclua as subpastas primeiro.');
-        return;
-      }
-
-      // Verificar se há simulados na pasta
-      const { data: simuladosPasta } = await supabase
-        .from('simulados')
-        .select('id')
-        .eq('pasta_id', pastaId);
-
-      if (simuladosPasta && simuladosPasta.length > 0) {
-        alert('Não é possível excluir esta pasta pois ela contém simulados. Exclua os simulados primeiro.');
-        return;
-      }
-
-      // Se não houver subpastas nem simulados, excluir a pasta
-      const { error } = await supabase
-        .from('simulado_pastas')
-        .delete()
-        .eq('id', pastaId);
-
-      if (error) throw error;
-
-      setPastas(pastas.filter(pasta => pasta.id !== pastaId));
+      // Recarregar conteúdo após deletar
+      await carregarConteudo();
+      alert('Pasta e todo seu conteúdo foram excluídos com sucesso!');
     } catch (error) {
       console.error('Erro ao excluir pasta:', error);
       alert('Erro ao excluir pasta. Por favor, tente novamente.');
