@@ -24,6 +24,7 @@ export default function Alunos() {
   const [showAdmins, setShowAdmins] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [newUser, setNewUser] = useState({
     nome: '',
     cpf: '',
@@ -182,6 +183,75 @@ export default function Alunos() {
         console.error('Error deleting user:', error);
         alert(error.message || 'Erro ao excluir aluno. Por favor, tente novamente.');
       }
+    }
+  };
+
+  const handleDeleteMultiple = async () => {
+    if (selectedUsers.length === 0) {
+      alert('Selecione pelo menos um aluno para excluir.');
+      return;
+    }
+
+    if (!window.confirm(`Tem certeza que deseja excluir ${selectedUsers.length} aluno(s) selecionado(s)?`)) {
+      return;
+    }
+
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const userId of selectedUsers) {
+        try {
+          const response = await fetch('/api/users/delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ id: userId }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error(`Erro ao excluir usuário ${userId}:`, data.error);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`Erro ao excluir usuário ${userId}:`, error);
+        }
+      }
+
+      // Recarregar a lista de usuários
+      await fetchUsers();
+      setSelectedUsers([]);
+
+      if (errorCount === 0) {
+        alert(`${successCount} aluno(s) excluído(s) com sucesso!`);
+      } else {
+        alert(`${successCount} aluno(s) excluído(s) com sucesso. ${errorCount} erro(s) ao excluir.`);
+      }
+    } catch (error: any) {
+      console.error('Error deleting users:', error);
+      alert('Erro ao excluir alunos. Por favor, tente novamente.');
+    }
+  };
+
+  const toggleSelectUser = (userId: number) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUsers.length === currentUsers.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(currentUsers.map(user => user.id));
     }
   };
 
@@ -357,11 +427,45 @@ export default function Alunos() {
           </div>
         </div>
 
+        {/* Botões de Ação para Seleção Múltipla */}
+        {selectedUsers.length > 0 && (
+          <div className="mb-4 flex items-center justify-between bg-blue-900 bg-opacity-50 px-4 py-3 rounded-lg">
+            <span className="text-white font-medium">
+              {selectedUsers.length} aluno(s) selecionado(s)
+            </span>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setSelectedUsers([])}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              >
+                Cancelar Seleção
+              </button>
+              <button
+                onClick={handleDeleteMultiple}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Excluir Selecionados</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Tabela */}
         <div className="w-full">
           <table className="min-w-full divide-y divide-gray-800">
             <thead className="bg-gray-800">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.length === currentUsers.length && currentUsers.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Nome</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">CPF</th>
@@ -375,6 +479,14 @@ export default function Alunos() {
             <tbody className="bg-gray-900 divide-y divide-gray-800">
               {currentUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-800 transition-colors duration-150">
+                  <td className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.includes(user.id)}
+                      onChange={() => toggleSelectUser(user.id)}
+                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-300">{user.nome}</td>
                   <td className="px-6 py-4 text-sm text-gray-300">{user.email}</td>
                   <td className="px-6 py-4 text-sm text-gray-300">{formatCPF(user.cpf)}</td>
