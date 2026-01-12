@@ -475,22 +475,78 @@ export default function Materiais() {
     }
   };
 
+  const deletarPastaRecursivamente = async (pastaId: number, supabase: any): Promise<void> => {
+    // 1. Buscar todas as subpastas
+    const { data: subpastas, error: subpastasError } = await supabase
+      .from('material_pastas')
+      .select('id')
+      .eq('parent_id', pastaId);
+
+    if (subpastasError) throw subpastasError;
+
+    // 2. Deletar recursivamente todas as subpastas
+    if (subpastas && subpastas.length > 0) {
+      for (const subpasta of subpastas) {
+        await deletarPastaRecursivamente(subpasta.id, supabase);
+      }
+    }
+
+    // 3. Buscar todos os materiais da pasta
+    const { data: materiaisVinculados, error: materiaisError } = await supabase
+      .from('materiais_didaticos')
+      .select('id, url, tipo')
+      .eq('pasta_id', pastaId);
+
+    if (materiaisError) throw materiaisError;
+
+    // 4. Deletar materiais e seus arquivos do storage
+    if (materiaisVinculados && materiaisVinculados.length > 0) {
+      for (const material of materiaisVinculados) {
+        // Se for documento ou arquivo, deletar do storage
+        if (material.tipo === 'documento' || material.tipo === 'arquivo') {
+          try {
+            await supabase.storage
+              .from('material')
+              .remove([material.url]);
+          } catch (storageError) {
+            console.error('Erro ao deletar arquivo do storage:', storageError);
+            // Continua mesmo se houver erro no storage
+          }
+        }
+
+        // Deletar registro do material
+        const { error: deleteMaterialError } = await supabase
+          .from('materiais_didaticos')
+          .delete()
+          .eq('id', material.id);
+
+        if (deleteMaterialError) throw deleteMaterialError;
+      }
+    }
+
+    // 5. Finalmente, deletar a pasta
+    const { error: deletePastaError } = await supabase
+      .from('material_pastas')
+      .delete()
+      .eq('id', pastaId);
+
+    if (deletePastaError) throw deletePastaError;
+  };
+
   const handleDeletePasta = async (pastaId: number) => {
     if (userType?.toLowerCase() !== 'admin') return;
 
+    if (!confirm('Tem certeza que deseja excluir esta pasta? ATENÇÃO: Todos os materiais e subpastas dentro dela também serão excluídos permanentemente!')) {
+      return;
+    }
+
     const supabase = createSupabaseClient();
     try {
-      const { error } = await supabase
-        .from('material_pastas')
-        .delete()
-        .eq('id', pastaId);
+      await deletarPastaRecursivamente(pastaId, supabase);
 
-      if (error) throw error;
-
-      setPastas(pastas.filter(pasta => pasta.id !== pastaId));
-      if (pastaAtual === pastaId) {
-        setPastaAtual(null);
-      }
+      // Recarregar conteúdo após deletar
+      await carregarConteudo();
+      alert('Pasta e todo seu conteúdo foram excluídos com sucesso!');
     } catch (error) {
       console.error('Erro ao excluir pasta:', error);
       alert('Erro ao excluir pasta. Por favor, tente novamente.');

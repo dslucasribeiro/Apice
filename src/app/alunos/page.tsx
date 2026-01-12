@@ -175,7 +175,9 @@ export default function Alunos() {
           throw new Error(data.error || 'Erro ao excluir usuário');
         }
 
-        setUsers(users.filter(user => user.id !== id));
+        // Recarregar a lista de usuários após deletar
+        await fetchUsers();
+        alert('Usuário excluído com sucesso!');
       } catch (error: any) {
         console.error('Error deleting user:', error);
         alert(error.message || 'Erro ao excluir aluno. Por favor, tente novamente.');
