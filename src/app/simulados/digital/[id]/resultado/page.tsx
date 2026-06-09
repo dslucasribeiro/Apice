@@ -119,6 +119,13 @@ export default function ResultadoSimuladoPage() {
         return;
       }
 
+      const questoesRespondidas = new Set(respostasAluno.map(resposta => resposta.questao_id));
+      if (questoesRespondidas.size < questoes.length) {
+        alert('Este simulado ainda está em andamento. Continue de onde parou para ver o resultado.');
+        router.push(`/simulados/digital/${simuladoId}`);
+        return;
+      }
+
       // Criar mapa de respostas do aluno
       const respostasPorQuestao: Record<string, string> = {};
       respostasAluno.forEach(resposta => {

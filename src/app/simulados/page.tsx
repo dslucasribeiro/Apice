@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import Navigation from '@/components/Navigation';
-import { FolderIcon, DocumentIcon, PlayCircleIcon, DocumentCheckIcon, TrashIcon, XMarkIcon, PencilIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { FolderIcon, DocumentIcon, PlayCircleIcon, DocumentCheckIcon, TrashIcon, XMarkIcon, PencilIcon, ChartBarIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 interface Pasta {
   id: number;
@@ -258,6 +258,10 @@ export default function Simulados() {
   // Adicionando estado para controlar quais simulados o aluno já respondeu
   const [simuladosRespondidos, setSimuladosRespondidos] = useState<number[]>([]);
   const [simuladosDigitaisRespondidos, setSimuladosDigitaisRespondidos] = useState<string[]>([]);
+  const [simuladosDigitaisEmAndamento, setSimuladosDigitaisEmAndamento] = useState<string[]>([]);
+  const [simuladoReinicio, setSimuladoReinicio] = useState<SimuladoDigital | null>(null);
+  const [alunoReinicioId, setAlunoReinicioId] = useState('');
+  const [reiniciandoTentativa, setReiniciandoTentativa] = useState(false);
 
   useEffect(() => {
     fetchUserType();
@@ -892,6 +896,46 @@ export default function Simulados() {
 
     setAlunos(data || []);
   };
+
+  const handleReiniciarTentativa = async () => {
+    if (!simuladoReinicio || !alunoReinicioId) {
+      alert('Selecione o aluno que poderá refazer o simulado.');
+      return;
+    }
+
+    const aluno = alunos.find(item => item.id === Number(alunoReinicioId));
+    if (!confirm(`Reiniciar a tentativa de ${aluno?.nome || 'este aluno'} neste simulado? Todas as respostas salvas serão apagadas.`)) {
+      return;
+    }
+
+    setReiniciandoTentativa(true);
+    try {
+      const response = await fetch('/api/simulados/reset-tentativa', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          alunoId: Number(alunoReinicioId),
+          simuladoId: simuladoReinicio.id
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao reiniciar tentativa.');
+      }
+
+      alert('Tentativa reiniciada. O aluno já pode refazer o simulado.');
+      setSimuladoReinicio(null);
+      setAlunoReinicioId('');
+    } catch (error: any) {
+      console.error('Erro ao reiniciar tentativa:', error);
+      alert(error.message || 'Erro ao reiniciar tentativa.');
+    } finally {
+      setReiniciandoTentativa(false);
+    }
+  };
   
   // Função para carregar simulados respondidos pelo aluno (simulados disponíveis para mostrar desempenho)
   const carregarSimuladosDoAluno = async (alunoId: number) => {
@@ -1360,7 +1404,7 @@ export default function Simulados() {
         setSimuladosRespondidos([]);
       }
 
-      // Buscar simulados digitais respondidos (verificar respostas_alunos)
+      // Classificar simulados digitais como em andamento ou concluídos.
       const { data: respostasAluno, error: respostasError } = await supabase
         .from('respostas_alunos')
         .select('questao_id')
@@ -1371,30 +1415,49 @@ export default function Simulados() {
         return;
       }
 
-      if (respostasAluno && respostasAluno.length > 0) {
-        // Buscar as questões para obter os IDs dos simulados
-        const questoesIds = respostasAluno.map(r => r.questao_id);
-        const { data: questoes, error: questoesError } = await supabase
-          .from('questoes')
-          .select('simulado_id')
-          .in('id', questoesIds)
-          .not('simulado_id', 'is', null);
-        
-        if (questoesError) {
-          console.error('Erro ao buscar questões:', questoesError);
-          return;
-        }
-
-        if (questoes && questoes.length > 0) {
-          // Extrair IDs únicos de simulados digitais
-          const simuladosDigitaisIds = Array.from(new Set(questoes.map(q => q.simulado_id).filter(id => id !== null)));
-          setSimuladosDigitaisRespondidos(simuladosDigitaisIds as string[]);
-        } else {
-          setSimuladosDigitaisRespondidos([]);
-        }
-      } else {
+      if (!respostasAluno || respostasAluno.length === 0) {
         setSimuladosDigitaisRespondidos([]);
+        setSimuladosDigitaisEmAndamento([]);
+        return;
       }
+
+      const { data: questoesDigitais, error: questoesError } = await supabase
+        .from('questoes')
+        .select('id, simulado_id')
+        .not('simulado_id', 'is', null);
+
+      if (questoesError) {
+        console.error('Erro ao buscar questões:', questoesError);
+        return;
+      }
+
+      const questoesRespondidas = new Set(respostasAluno.map(resposta => resposta.questao_id));
+      const totaisPorSimulado: Record<string, number> = {};
+      const respondidasPorSimulado: Record<string, number> = {};
+
+      questoesDigitais?.forEach(questao => {
+        if (!questao.simulado_id) return;
+
+        totaisPorSimulado[questao.simulado_id] = (totaisPorSimulado[questao.simulado_id] || 0) + 1;
+        if (questoesRespondidas.has(questao.id)) {
+          respondidasPorSimulado[questao.simulado_id] = (respondidasPorSimulado[questao.simulado_id] || 0) + 1;
+        }
+      });
+
+      const concluidos: string[] = [];
+      const emAndamento: string[] = [];
+
+      Object.entries(respondidasPorSimulado).forEach(([simuladoId, respondidas]) => {
+        const total = totaisPorSimulado[simuladoId] || 0;
+        if (total > 0 && respondidas >= total) {
+          concluidos.push(simuladoId);
+        } else if (respondidas > 0) {
+          emAndamento.push(simuladoId);
+        }
+      });
+
+      setSimuladosDigitaisRespondidos(concluidos);
+      setSimuladosDigitaisEmAndamento(emAndamento);
     } catch (error) {
       console.error('Erro ao carregar simulados respondidos:', error);
     }
@@ -2233,6 +2296,14 @@ export default function Simulados() {
                       <DocumentCheckIcon className="w-5 h-5" />
                       <span>Desempenho</span>
                     </button>
+                  ) : simuladosDigitaisEmAndamento.includes(simulado.id) ? (
+                    <button
+                      onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
+                      className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <ArrowPathIcon className="w-5 h-5" />
+                      <span>Continuar Simulado</span>
+                    </button>
                   ) : (
                     <button
                       onClick={() => window.location.href = `/simulados/digital/${simulado.id}`}
@@ -2240,6 +2311,19 @@ export default function Simulados() {
                     >
                       <PlayCircleIcon className="w-5 h-5" />
                       <span>Iniciar Simulado</span>
+                    </button>
+                  )}
+
+                  {userType?.toLowerCase() === 'admin' && (
+                    <button
+                      onClick={() => {
+                        setSimuladoReinicio(simulado);
+                        setAlunoReinicioId('');
+                      }}
+                      className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <ArrowPathIcon className="w-5 h-5" />
+                      <span>Reiniciar tentativa de aluno</span>
                     </button>
                   )}
                   
@@ -3858,6 +3942,69 @@ export default function Simulados() {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {simuladoReinicio && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 p-6 rounded-lg w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">Reiniciar tentativa</h2>
+              <button
+                onClick={() => {
+                  setSimuladoReinicio(null);
+                  setAlunoReinicioId('');
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <p className="text-gray-300 mb-4">
+              Simulado {simuladoReinicio.mes} {simuladoReinicio.ano}
+            </p>
+
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Selecione o aluno
+            </label>
+            <select
+              value={alunoReinicioId}
+              onChange={(event) => setAlunoReinicioId(event.target.value)}
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white"
+            >
+              <option value="">Selecione...</option>
+              {alunos.map(aluno => (
+                <option key={aluno.id} value={aluno.id}>
+                  {aluno.nome}
+                </option>
+              ))}
+            </select>
+
+            <p className="text-sm text-yellow-400 mt-4">
+              Esta ação apagará todas as respostas salvas deste aluno somente neste simulado.
+            </p>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setSimuladoReinicio(null);
+                  setAlunoReinicioId('');
+                }}
+                disabled={reiniciandoTentativa}
+                className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleReiniciarTentativa}
+                disabled={reiniciandoTentativa || !alunoReinicioId}
+                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reiniciandoTentativa ? 'Reiniciando...' : 'Reiniciar tentativa'}
               </button>
             </div>
           </div>

@@ -38,8 +38,10 @@ export default function SimuladoDigitalPage() {
   const [questoes, setQuestoes] = useState<Questao[]>([]);
   const [questaoAtualIndex, setQuestaoAtualIndex] = useState(0);
   const [respostas, setRespostas] = useState<Record<string, string>>({});
+  const [respostasPersistidas, setRespostasPersistidas] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [alunoId, setAlunoId] = useState<number | null>(null);
 
   useEffect(() => {
     carregarSimulado();
@@ -88,6 +90,7 @@ export default function SimuladoDigitalPage() {
           .single();
 
         if (usuarioData) {
+          setAlunoId(usuarioData.id);
           const questoesIds = questoesFormatadas.map(q => q.id);
           const { data: respostasExistentes } = await supabase
             .from('respostas_alunos')
@@ -101,6 +104,17 @@ export default function SimuladoDigitalPage() {
               respostasMap[r.questao_id] = r.alternativa_resposta;
             });
             setRespostas(respostasMap);
+            setRespostasPersistidas(respostasMap);
+
+            const primeiraQuestaoPendente = questoesFormatadas.findIndex(
+              questao => !respostasMap[questao.id]
+            );
+
+            if (primeiraQuestaoPendente >= 0) {
+              setQuestaoAtualIndex(primeiraQuestaoPendente);
+            } else {
+              router.replace(`/simulados/digital/${simuladoId}/resultado`);
+            }
           }
         }
       }
@@ -134,6 +148,47 @@ export default function SimuladoDigitalPage() {
     }
   };
 
+  const salvarResposta = async (questaoId: string, alternativaResposta: string) => {
+    if (!alunoId) {
+      throw new Error('Usuário não encontrado.');
+    }
+
+    const supabase = createSupabaseClient();
+    const { data: respostasExistentes, error: consultaError } = await supabase
+      .from('respostas_alunos')
+      .select('questao_id')
+      .eq('aluno_id', alunoId)
+      .eq('questao_id', questaoId)
+      .limit(1);
+
+    if (consultaError) throw consultaError;
+
+    if (respostasExistentes && respostasExistentes.length > 0) {
+      const { error } = await supabase
+        .from('respostas_alunos')
+        .update({
+          alternativa_id: null,
+          alternativa_resposta: alternativaResposta
+        })
+        .eq('aluno_id', alunoId)
+        .eq('questao_id', questaoId);
+
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase
+      .from('respostas_alunos')
+      .insert({
+        aluno_id: alunoId,
+        questao_id: questaoId,
+        alternativa_id: null,
+        alternativa_resposta: alternativaResposta
+      });
+
+    if (error) throw error;
+  };
+
   const handleResponder = async () => {
     const respostaAtual = respostas[questaoAtual.id];
     
@@ -144,41 +199,31 @@ export default function SimuladoDigitalPage() {
 
     setSalvando(true);
     try {
-      const supabase = createSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const respostasAtualizadas = {
+        ...respostas,
+        [questaoAtual.id]: respostaAtual
+      };
 
-      if (!user) {
-        alert('Você precisa estar logado para responder.');
-        return;
-      }
+      const respostasAlteradas = Object.entries(respostasAtualizadas).filter(
+        ([questaoId, alternativaResposta]) => respostasPersistidas[questaoId] !== alternativaResposta
+      );
 
-      const { data: usuarioData } = await supabase
-        .from('usuarios')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+      await Promise.all(
+        respostasAlteradas.map(([questaoId, alternativaResposta]) =>
+          salvarResposta(questaoId, alternativaResposta)
+        )
+      );
+      setRespostasPersistidas(respostasAtualizadas);
 
-      if (!usuarioData) {
-        alert('Usuário não encontrado.');
-        return;
-      }
+      const proximaQuestaoPendente = questoes.findIndex(
+        questao => !respostasAtualizadas[questao.id]
+      );
 
-      const { error } = await supabase
-        .from('respostas_alunos')
-        .insert({
-          aluno_id: usuarioData.id,
-          questao_id: questaoAtual.id,
-          alternativa_id: null,
-          alternativa_resposta: respostaAtual
-        });
-
-      if (error) throw error;
-
-      if (questaoAtualIndex < questoes.length - 1) {
-        proximaQuestao();
-      } else {
+      if (proximaQuestaoPendente === -1) {
         alert('Simulado finalizado! Redirecionando para resultados...');
         router.push(`/simulados/digital/${simuladoId}/resultado`);
+      } else {
+        setQuestaoAtualIndex(proximaQuestaoPendente);
       }
     } catch (error) {
       console.error('Erro ao salvar resposta:', error);
@@ -316,7 +361,11 @@ export default function SimuladoDigitalPage() {
             disabled={salvando || !respostas[questaoAtual.id]}
             className="px-8 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {salvando ? 'Salvando...' : 'Responder'}
+            {salvando
+              ? 'Salvando...'
+              : Object.keys(respostas).length === questoes.length
+              ? 'Finalizar Simulado'
+              : 'Salvar e Continuar'}
           </button>
 
           <button
